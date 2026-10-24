@@ -34,6 +34,29 @@ export async function callSiliconFlowSTT(apiKey, audioBlob) {
   return '';
 }
 
+export async function callGroqWhisperSTT(apiKey, audioBlob) {
+  if (!apiKey) throw new Error('Groq API key required');
+
+  const formData = new FormData();
+  formData.append('file', audioBlob, 'audio.wav');
+  formData.append('model', 'whisper-large-v3-turbo');
+
+  try {
+    const res = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.text || '';
+    }
+  } catch (e) {}
+  return '';
+}
+
 export async function callSiliconFlowChat(apiKey, prompt) {
   if (!apiKey) throw new Error('SiliconFlow API key required');
 

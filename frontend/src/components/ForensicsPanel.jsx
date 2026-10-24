@@ -38,6 +38,7 @@ export default function ForensicsPanel({
   const animFrameRef = useRef(null);
   const micStreamRef = useRef(null);
   const speechRecognitionRef = useRef(null);
+  const capturedWordsRef = useRef('');
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -124,6 +125,7 @@ export default function ForensicsPanel({
     } else {
       try {
         setLiveSpeechText('');
+        capturedWordsRef.current = '';
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         micStreamRef.current = stream;
 
@@ -150,7 +152,6 @@ export default function ForensicsPanel({
         updateSpectrum();
 
         // Browser Speech Recognition for real spoken words
-        let capturedWords = '';
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRec) {
           try {
@@ -159,10 +160,11 @@ export default function ForensicsPanel({
             rec.interimResults = true;
             rec.lang = 'en-US';
             rec.onresult = (evt) => {
-              capturedWords = Array.from(evt.results)
+              const words = Array.from(evt.results)
                 .map((r) => r[0].transcript)
                 .join(' ');
-              setLiveSpeechText(capturedWords);
+              capturedWordsRef.current = words;
+              setLiveSpeechText(words);
             };
             rec.start();
             speechRecognitionRef.current = rec;
@@ -185,7 +187,8 @@ export default function ForensicsPanel({
         mediaRecorder.onstop = () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
           const file = new File([audioBlob], 'live_recording.wav', { type: 'audio/wav' });
-          const finalHint = capturedWords || transcriptHint || 'Voice recording captured.';
+          const spoken = capturedWordsRef.current ? capturedWordsRef.current.trim() : '';
+          const finalHint = spoken || transcriptHint || '';
           onAnalyzeAudioFile(file, finalHint);
         };
 

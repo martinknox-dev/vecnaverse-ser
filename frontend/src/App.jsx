@@ -10,6 +10,7 @@ import { detectBrowserHardware, fetchBackendHardware } from './services/hardware
 import { analyzeAudioClientSide } from './services/clientSerEngine';
 import { saveCaseToDevice, getAllSavedCases, deleteSavedCase } from './services/caseDb';
 import { cyberAudioPlayer } from './services/audioSynthesizer';
+import { callSiliconFlowSTT, callGroqWhisperSTT } from './services/cloudServices';
 import AnalyzingOverlay from './components/AnalyzingOverlay';
 
 export default function App() {
@@ -209,60 +210,67 @@ export default function App() {
     }, 400);
   };
 
-  // Audio Analysis: Supports Hybrid Backend or Client-Side Pure Web Audio DSP
+  // Audio Analysis: Supports Hybrid Backend, Cloud STT, or Client-Side Pure Web Audio DSP
   const handleAnalyzeAudioFile = async (file, transcriptHint) => {
     cyberAudioPlayer.stop();
     setIsAnalyzing(true);
 
-    if (currentTier === 'LOW_END' || (!backendConnected && !isMockMode)) {
+    let activeHint = transcriptHint ? transcriptHint.trim() : '';
+
+    // If no hint provided and user has BYOK credentials, attempt cloud transcription during loading overlay
+    if (!activeHint && apiKey) {
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        const clientPayload = await analyzeAudioClientSide(arrayBuffer, 16000, transcriptHint);
-        setActiveCall(clientPayload);
-        setSessionCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
-      } catch (e) {
-        console.error('Client DSP analysis failed:', e);
-      } finally {
-        setIsAnalyzing(false);
-      }
-      return;
+        if (provider === 'siliconflow') {
+          const sfText = await callSiliconFlowSTT(apiKey, file);
+          if (sfText) activeHint = sfText.trim();
+        } else if (provider === 'groq') {
+          const gText = await callGroqWhisperSTT(apiKey, file);
+          if (gText) activeHint = gText.trim();
+        }
+      } catch (e) {}
     }
 
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      if (transcriptHint) {
-        formData.append('transcript_hint', transcriptHint);
-      }
-
-      const headers = {};
-      if (provider) headers['X-Provider'] = provider;
-      if (apiKey) headers['X-Api-Key'] = apiKey;
-
-      const res = await fetch('/api/analyze-audio', {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-
-      if (!res.ok) throw new Error(`Server returned ${res.status}`);
-
-      const payload = await res.json();
-      setActiveCall(payload);
-      setSessionCalls((prev) => {
-        const filtered = prev.filter((c) => c.call_id !== payload.call_id);
-        const updated = [payload, ...filtered];
-        return updated.sort((a, b) => b.urgency_score - a.urgency_score);
-      });
-    } catch (err) {
+    // If backend is online, send to backend for SenseVoice / Whisper / hybrid triage
+    if (backendConnected && !isMockMode) {
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        const clientPayload = await analyzeAudioClientSide(arrayBuffer, 16000, transcriptHint);
-        setActiveCall(clientPayload);
-        setSessionCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
-      } catch (inner) {
-        alert('Could not analyze audio.');
-      }
+        const formData = new FormData();
+        formData.append('file', file);
+        if (activeHint) {
+          formData.append('transcript_hint', activeHint);
+        }
+
+        const headers = {};
+        if (provider) headers['X-Provider'] = provider;
+        if (apiKey) headers['X-Api-Key'] = apiKey;
+
+        const res = await fetch('/api/analyze-audio', {
+          method: 'POST',
+          headers,
+          body: formData,
+        });
+
+        if (res.ok) {
+          const payload = await res.json();
+          setActiveCall(payload);
+          setSessionCalls((prev) => {
+            const filtered = prev.filter((c) => c.call_id !== payload.call_id);
+            const updated = [payload, ...filtered];
+            return updated.sort((a, b) => b.urgency_score - a.urgency_score);
+          });
+          setIsAnalyzing(false);
+          return;
+        }
+      } catch (err) {}
+    }
+
+    // Client-side fallback if backend is offline or on static hosting
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const clientPayload = await analyzeAudioClientSide(arrayBuffer, 16000, activeHint);
+      setActiveCall(clientPayload);
+      setSessionCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
+    } catch (e) {
+      console.error('Audio analysis error:', e);
     } finally {
       setIsAnalyzing(false);
     }

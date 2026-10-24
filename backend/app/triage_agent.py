@@ -123,6 +123,11 @@ def detect_threat_keywords(text: str) -> List[str]:
 
 def classify_crime_category(text: str, keywords: List[str]) -> str:
     """Classify the crime category from detected threat keywords and context."""
+    if "[Language not supported" in text:
+        return "Non-English Audio / Language Not Supported"
+    elif "[No speech detected" in text:
+        return "Unintelligible Audio / No Speech Detected"
+
     kw_set = set(k.lower() for k in keywords)
 
     if any(k in kw_set for k in ["digital arrest", "arrest warrant", "cbi", "police", "customs", "narcotics"]):
@@ -195,7 +200,24 @@ def get_offline_playbook(
     jitter = biomarkers.get("jitter_tremor_pct", 1.5)
     sps = biomarkers.get("speech_rate_sps", 4.0)
 
-    if "Digital Arrest" in crime_category:
+    if "Language Not Supported" in crime_category:
+        actions = [
+            "1. Language not supported: Re-route call to regional language translation officer.",
+            "2. Determine caller language (Hindi, Tamil, Telugu, Mandarin, etc.) and confirm physical safety.",
+            "3. Record incoming telephone number and transaction reference UTR."
+        ]
+        explain = (
+            "Voice audio contains speech in a non-English or unsupported language. "
+            "Manual translation is required for transcript keyword screening."
+        )
+    elif "No Speech Detected" in crime_category:
+        actions = [
+            "1. Verify caller line connection and audio input quality.",
+            "2. Request complainant to state emergency details clearly.",
+            "3. If silent call persists, initiate callback protocol."
+        ]
+        explain = "Audio signal contained no clear spoken words. Acoustic parameters logged."
+    elif "Digital Arrest" in crime_category:
         actions = [
             "1. Instruct caller immediately to DISCONNECT the scammer's video call and NOT share any OTP or screen share.",
             "2. Reassure the victim that Indian Law Enforcement (CBI/ED/State Police) never conduct arrests or interrogations over Skype/WhatsApp video.",

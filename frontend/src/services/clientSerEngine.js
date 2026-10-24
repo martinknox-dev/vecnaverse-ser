@@ -303,10 +303,48 @@ export async function analyzeAudioClientSide(audioData, sampleRate = 16000, tran
   };
 
   // Determine transcript without fabricating fake scam narratives
-  const rawText = transcriptHint || `Voice audio processed (${pitch} Hz, ${jitter}% tremor). Acoustic telemetry logged.`;
+  let rawText = transcriptHint ? transcriptHint.trim() : '';
+
+  // Check for non-English script (CJK, Cyrillic, Arabic, Devanagari, Hangul)
+  const nonEnglishRegex = /[\u0400-\u04FF\u0600-\u06FF\u0900-\u097F\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/;
+  if (rawText && nonEnglishRegex.test(rawText)) {
+    rawText = '[Language not supported: audio is not in English. Please speak or upload English audio for automated cybercrime triage.]';
+  } else if (!rawText) {
+    rawText = '[No speech detected in audio recording. Please verify audio clarity.]';
+  }
+
   const { text: redactedText, count: piiCount } = clientRedactPii(rawText);
   const keywords = clientDetectThreats(rawText);
   const fusion = clientFuseBiomarkers(biomarkers, keywords);
+
+  let category = 'Cyber Incident / General Fraud Inquiry';
+  let actions = [
+    '1. Verify caller location and determine if unauthorized transfer occurred.',
+    '2. Advise caller to halt all outgoing transactions and revoke remote access.',
+    '3. Log emergency 1930 NCRP financial freeze request if funds were transferred.',
+  ];
+
+  if (rawText.includes('[Language not supported')) {
+    category = 'Non-English Audio / Language Not Supported';
+    actions = [
+      '1. Language not supported: Re-route call to regional language translation interpreter.',
+      '2. Verify caller primary spoken language and confirm physical safety.',
+      '3. Record incoming telephone number and transaction reference UTR.',
+    ];
+  } else if (rawText.includes('[No speech detected')) {
+    category = 'Unintelligible Audio / No Speech Detected';
+    actions = [
+      '1. Verify audio connection quality and background noise.',
+      '2. Request complainant to speak clearly.',
+      '3. If line remains silent, initiate callback protocol.',
+    ];
+  } else if (keywords.includes('digital arrest') || keywords.includes('cbi')) {
+    category = 'Digital Arrest Extortion / Impersonation of Law Enforcement';
+  } else if (keywords.includes('anydesk') || keywords.includes('quicksupport')) {
+    category = 'Remote Access Fraud / Device Takeover (AnyDesk/TeamViewer)';
+  } else if (keywords.includes('otp') || keywords.includes('transfer') || keywords.includes('upi')) {
+    category = 'Active UPI Fraud / Unauthorized Financial Drain';
+  }
 
   // Generate 2.5s timeline segments
   const durationSec = Math.max(float32Array.length / sampleRate, 1.0);
@@ -337,13 +375,9 @@ export async function analyzeAudioClientSide(audioData, sampleRate = 16000, tran
       detected_keywords: keywords,
     },
     triage_insights: {
-      crime_category: 'Digital Arrest Extortion / Unauthorized Transfer',
-      recommended_actions: [
-        '1. Instruct caller immediately to DISCONNECT the scammer video call.',
-        '2. Log emergency 1930 NCRP financial freeze request for beneficiary account.',
-        '3. Reassure victim that law enforcement never conducts arrests on video calls.',
-      ],
-      explainability_summary: `Urgency ${fusion.urgencyScore}/100 computed on-device via Web Audio DSP with ${jitter}% vocal jitter and ${pitch} Hz pitch.`,
+      crime_category: category,
+      recommended_actions: actions,
+      explainability_summary: `Urgency ${fusion.urgencyScore}/100 computed on-device via Web Audio DSP with ${jitter}% vocal tremor and ${pitch} Hz pitch.`,
       indicative_disclaimer: INDICATIVE_DISCLAIMER,
     },
     timeline_segments: segments,

@@ -99,14 +99,8 @@ def _get_silero_vad():
 def run_onnx_sense_voice(y: np.ndarray, sr: int = 16000) -> Dict[str, Any]:
     """
     Run SenseVoice ONNX speech + emotion + audio event detection.
-    Returns:
-    {
-      "transcript": str,
-      "detected_tags": List[str],
-      "onnx_emotion": Optional[str],
-      "onnx_events": List[str],
-      "has_onnx": bool
-    }
+    Detects language: if speech is in an unsupported/non-English language (Chinese, Japanese,
+    Korean, Cantonese, etc.), flags language as unsupported.
     """
     recognizer = _get_sense_voice_recognizer()
     if recognizer is None:
@@ -124,11 +118,20 @@ def run_onnx_sense_voice(y: np.ndarray, sr: int = 16000) -> Dict[str, Any]:
         recognizer.decode_stream(stream)
         raw_text = stream.result.text or ""
 
-        # Parse special tags like <|FEARFUL|>, <|HAPPY|>, <|SAD|>, <|ANGRY|>, <|NEUTRAL|>
-        # and audio events like <|Cry|>, <|Laughter|>, <|Cough|>
         import re
         tags = re.findall(r"<\|([^|>]+)\|>", raw_text)
-        cleaned_text = re.sub(r"<\|[^|>]*\|>", "", raw_text).strip()
+        cleaned_text = re.sub(r"<\|[^|>]*\|>", "", raw_text)
+        # Strip Asian / CJK full-stop punctuation
+        cleaned_text = re.sub(r"[\u3000-\u303f\uff00-\uffef\u3002\uff0c\uff01\uff1f]", "", cleaned_text).strip()
+
+        # Check for non-English script (CJK ideographs, Japanese Kana, Korean Hangul)
+        has_cjk = bool(re.search(r"[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]", cleaned_text))
+        latin_chars = len(re.findall(r"[a-zA-Z]", cleaned_text))
+
+        if has_cjk:
+            cleaned_text = "[Language not supported: audio is not in English. Please speak or upload English audio for automated cybercrime triage.]"
+        elif len(cleaned_text) == 0 or (latin_chars == 0 and not re.search(r"\d", cleaned_text)):
+            cleaned_text = ""
 
         # Map SenseVoice emotion tags to canonical target classes
         tag_emotion_map = {
@@ -148,7 +151,6 @@ def run_onnx_sense_voice(y: np.ndarray, sr: int = 16000) -> Dict[str, Any]:
             elif upper_tag in ("CRY", "LAUGHTER", "COUGH", "SNEEZE", "BREATH"):
                 events.append(tag)
 
-        # If crying detected, prioritize distress
         if any("CRY" in t.upper() for t in tags):
             detected_emotion = "distress"
 

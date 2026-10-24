@@ -222,12 +222,9 @@ async def analyze_audio(
                 transcript_text = whisper_text
 
     # If no transcript is provided and neither SenseVoice nor Whisper recognized speech,
-    # provide a realistic forensic placeholder rather than inventing a false scam claim
+    # inform the investigator clearly that no speech was detected
     if not transcript_text:
-        transcript_text = (
-            f"Voice audio analyzed. Fundamental pitch at {biomarkers['pitch_hz']} Hz with "
-            f"{biomarkers['jitter_tremor_pct']}% micro-tremor. No explicit threat keywords identified in audio signal."
-        )
+        transcript_text = "[No speech detected in audio recording. Please verify audio clarity.]"
 
     # 3. Generate PII redactions, threat keywords, urgency score, and triage insights
     transcript_info, triage_insights, urgency_score, urgency_level = await generate_triage_insights(
