@@ -13,7 +13,9 @@ import {
   Download,
   Flame,
   Zap,
-  ArrowRight
+  BookmarkPlus,
+  Save,
+  Check
 } from 'lucide-react';
 import { INDICATIVE_DISCLAIMER } from '../mockData';
 
@@ -23,7 +25,9 @@ export default function DecisionSupport({
   copilotData,
   isProcessingCopilot,
   onExportReport,
-  isExporting
+  isExporting,
+  onSaveCaseLocally,
+  isCaseSaved
 }) {
   const [completedActions, setCompletedActions] = useState({});
   const [dispatchNotes, setDispatchNotes] = useState('');
@@ -47,7 +51,6 @@ export default function DecisionSupport({
     indicative_disclaimer: INDICATIVE_DISCLAIMER,
   };
 
-  // If copilot returned updated actions, use those, else use original recommended actions
   const actions = (copilotData && copilotData.updated_actions) || insights.recommended_actions || [];
 
   const toggleAction = (idx) => {
@@ -60,7 +63,6 @@ export default function DecisionSupport({
   const handleProcessCopilotSubmit = () => {
     if (!dispatchNotes.trim() || isProcessingCopilot) return;
     onProcessVoiceCopilot(dispatchNotes.trim());
-    // Also record in audit log
     const newLog = {
       id: Date.now(),
       time: new Date().toLocaleTimeString(),
@@ -94,51 +96,76 @@ export default function DecisionSupport({
   };
 
   return (
-    <div className="bg-cyber-panel border border-cyber-border rounded-xl flex flex-col h-full shadow-lg overflow-hidden">
+    <div className="bg-[#0b0e17] border border-cyber-border rounded-2xl flex flex-col h-full shadow-xl overflow-hidden">
       {/* Panel Header */}
-      <div className="px-4 py-3 border-b border-cyber-border bg-cyber-dark/50 flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-cyber-border bg-[#07070c] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-cyan-400" />
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">
             Investigator Decision Support
           </h2>
         </div>
-        {/* Export Report Action Button */}
-        <button
-          onClick={onExportReport}
-          disabled={isExporting}
-          className="flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-bold bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-700/80 text-cyan-300 rounded shadow-sm transition-all"
-          title="Export complete Forensic Triage Dossier in Markdown and JSON formats"
-        >
-          <Download className="w-3.5 h-3.5" />
-          <span>{isExporting ? 'Exporting...' : 'Export Case Report'}</span>
-        </button>
+
+        {/* Action Buttons: Save Local & Export Case Report */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => onSaveCaseLocally && onSaveCaseLocally(activeCall)}
+            className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded shadow-sm border transition-all ${
+              isCaseSaved
+                ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
+                : 'bg-cyber-dark border-cyber-border text-slate-300 hover:border-slate-500'
+            }`}
+            title="Save dossier permanently in on-device IndexedDB storage"
+          >
+            {isCaseSaved ? (
+              <>
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span>Saved Local</span>
+              </>
+            ) : (
+              <>
+                <Save className="w-3 h-3 text-cyan-400" />
+                <span>Save Case</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={onExportReport}
+            disabled={isExporting}
+            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-black bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-black rounded shadow-sm shadow-cyan-600/20 transition-all"
+            title="Export complete Forensic Triage Dossier in Markdown and JSON formats"
+          >
+            <Download className="w-3 h-3" />
+            <span>{isExporting ? 'Exporting...' : 'Export Dossier'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="p-4 space-y-4 overflow-y-auto flex-1">
+      <div className="p-4 space-y-3.5 overflow-y-auto flex-1">
         {/* Crime Category Card */}
-        <div className="bg-cyber-card border border-cyber-border rounded-lg p-3.5 space-y-1.5">
-          <span className="text-[11px] font-semibold uppercase text-slate-400 tracking-wider">
+        <div className="bg-cyber-card border border-cyber-border rounded-xl p-3.5 space-y-1.5">
+          <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
             Classified Cybercrime Vector
           </span>
-          <div className="text-sm font-extrabold text-white flex items-center gap-2">
+          <div className="text-sm font-black text-white flex items-center gap-2 font-sans">
             <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
             {insights.crime_category}
           </div>
-          <p className="text-xs text-slate-300 leading-relaxed pt-1 bg-cyber-dark/60 p-2.5 rounded border border-cyber-border/70">
-            <strong className="text-cyan-400 font-medium">Explainability: </strong>
+          <p className="text-xs text-slate-300 leading-relaxed pt-1 bg-cyber-dark/60 p-2.5 rounded-lg border border-cyber-border/70">
+            <strong className="text-cyan-400 font-semibold">Explainability: </strong>
             {insights.explainability_summary}
           </p>
         </div>
 
-        {/* 1930 NCRP Freeze Ticket Draft (Auto-generated by Wispr Co-Pilot) */}
+        {/* 1930 NCRP Freeze Ticket Draft */}
         {ticketDraft && (
-          <div className="bg-gradient-to-br from-rose-950/40 via-cyber-card to-cyber-panel border border-rose-600/50 rounded-lg p-3.5 space-y-2.5 shadow-md shadow-rose-950/30">
+          <div className="bg-gradient-to-br from-rose-950/40 via-cyber-card to-cyber-panel border border-rose-600/50 rounded-xl p-3.5 space-y-2.5 shadow-md shadow-rose-950/30">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <Flame className="w-4 h-4 text-rose-400 animate-pulse" />
-                <span className="text-xs font-extrabold uppercase tracking-wider text-rose-200">
+                <span className="text-xs font-black uppercase tracking-wider text-rose-200">
                   1930 NCRP Freeze Ticket Draft
                 </span>
               </div>
@@ -148,20 +175,20 @@ export default function DecisionSupport({
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-cyber-dark/80 p-2 rounded border border-cyber-border/70">
-                <span className="text-[10px] text-slate-400 block">Ticket Docket</span>
+              <div className="bg-cyber-dark/80 p-2 rounded-lg border border-cyber-border/70">
+                <span className="text-[10px] text-slate-400 block font-mono">Ticket Docket</span>
                 <strong className="font-mono text-cyan-300">{ticketDraft.ticket_id}</strong>
               </div>
-              <div className="bg-cyber-dark/80 p-2 rounded border border-cyber-border/70">
-                <span className="text-[10px] text-slate-400 block">Amount Involved</span>
+              <div className="bg-cyber-dark/80 p-2 rounded-lg border border-cyber-border/70">
+                <span className="text-[10px] text-slate-400 block font-mono">Amount Involved</span>
                 <strong className="font-mono text-amber-300 text-sm">{ticketDraft.amount_involved}</strong>
               </div>
-              <div className="bg-cyber-dark/80 p-2 rounded border border-cyber-border/70">
-                <span className="text-[10px] text-slate-400 block">Payment Channel</span>
+              <div className="bg-cyber-dark/80 p-2 rounded-lg border border-cyber-border/70">
+                <span className="text-[10px] text-slate-400 block font-mono">Payment Channel</span>
                 <span className="text-slate-200 font-medium">{ticketDraft.payment_channel}</span>
               </div>
-              <div className="bg-cyber-dark/80 p-2 rounded border border-cyber-border/70">
-                <span className="text-[10px] text-slate-400 block">Golden Hour Window</span>
+              <div className="bg-cyber-dark/80 p-2 rounded-lg border border-cyber-border/70">
+                <span className="text-[10px] text-slate-400 block font-mono">Golden Hour Window</span>
                 <span className="text-emerald-400 font-medium">{ticketDraft.golden_hour_window_remaining || 'Active Hold'}</span>
               </div>
             </div>
@@ -169,9 +196,9 @@ export default function DecisionSupport({
             <button
               onClick={() => handleSubmitTicket(ticketDraft.ticket_id)}
               disabled={isTicketSubmitted}
-              className={`w-full py-2 px-3 text-xs font-extrabold rounded-md flex items-center justify-center gap-1.5 transition-all shadow-md ${
+              className={`w-full py-2 px-3 text-xs font-black rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-md ${
                 isTicketSubmitted
-                  ? 'bg-emerald-900/60 border border-emerald-500/60 text-emerald-300 cursor-default'
+                  ? 'bg-emerald-950/80 border border-emerald-500 text-emerald-300 cursor-default'
                   : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
               }`}
             >
@@ -191,17 +218,17 @@ export default function DecisionSupport({
         )}
 
         {/* Recommended Actions Checklist */}
-        <div className="bg-cyber-card border border-cyber-border rounded-lg p-3.5 space-y-2.5">
+        <div className="bg-cyber-card border border-cyber-border rounded-xl p-3.5 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
               Officer Triage Checklist (1930 / NCRP)
             </span>
-            <span className="text-[10px] text-slate-400">
-              {Object.values(completedActions).filter(Boolean).length} of {actions.length} Done
+            <span className="text-[10px] text-slate-400 font-mono">
+              {Object.values(completedActions).filter(Boolean).length} / {actions.length} Completed
             </span>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {actions.map((act, idx) => {
               const isChecked = !!completedActions[idx];
               return (
@@ -228,7 +255,7 @@ export default function DecisionSupport({
         </div>
 
         {/* Wispr Voice Co-Pilot & Dispatch Notes */}
-        <div className="bg-cyber-card border border-cyber-border rounded-lg p-3.5 space-y-2.5">
+        <div className="bg-cyber-card border border-cyber-border rounded-xl p-3.5 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-cyan-400" />
@@ -249,7 +276,7 @@ export default function DecisionSupport({
               onChange={(e) => setDispatchNotes(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Dictate live commands hands-free (e.g. 'Caller confirmed ₹45,000 sent via PhonePe, freeze account and log FIR draft')..."
-              className="w-full bg-cyber-dark border border-cyber-border rounded-lg p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none font-sans"
+              className="w-full bg-cyber-dark border border-cyber-border rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none font-sans"
             />
           </div>
 
@@ -257,7 +284,7 @@ export default function DecisionSupport({
             <div className="flex items-center gap-1.5">
               <button
                 onClick={handleClearNote}
-                className="px-2.5 py-1.5 text-xs text-slate-400 hover:text-white rounded border border-cyber-border hover:border-slate-600 flex items-center gap-1 transition-colors"
+                className="px-2.5 py-1 text-xs text-slate-400 hover:text-white rounded border border-cyber-border hover:border-slate-600 flex items-center gap-1 transition-colors"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Clear</span>
@@ -270,7 +297,7 @@ export default function DecisionSupport({
             <button
               onClick={handleProcessCopilotSubmit}
               disabled={!dispatchNotes.trim() || isProcessingCopilot}
-              className={`px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1.5 transition-all ${
+              className={`px-3 py-1.5 text-xs font-black rounded-lg flex items-center gap-1.5 transition-all ${
                 dispatchNotes.trim() && !isProcessingCopilot
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-black shadow-md shadow-cyan-500/20'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
@@ -296,7 +323,7 @@ export default function DecisionSupport({
               <span className="text-[10px] font-mono uppercase text-slate-400">
                 Incident Audit Log:
               </span>
-              <div className="space-y-1.5 max-h-28 overflow-y-auto">
+              <div className="space-y-1 max-h-24 overflow-y-auto">
                 {caseNotesLog.map((log) => (
                   <div
                     key={log.id}
@@ -314,7 +341,7 @@ export default function DecisionSupport({
         </div>
 
         {/* Responsible AI Indicative Mandate Banner */}
-        <div className="bg-amber-950/20 border border-amber-600/40 rounded-lg p-3 space-y-1">
+        <div className="bg-amber-950/20 border border-amber-600/40 rounded-xl p-3 space-y-1">
           <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>Responsible AI Guardrail</span>

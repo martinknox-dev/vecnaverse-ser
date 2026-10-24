@@ -357,6 +357,31 @@ async def call_groq_whisper(api_key: str, audio_bytes: bytes) -> Optional[str]:
     return None
 
 
+async def call_siliconflow_stt(api_key: str, audio_bytes: bytes) -> Optional[str]:
+    """Call SiliconFlow FunAudioLLM/SenseVoiceSmall for free on-cloud STT."""
+    if not api_key:
+        return None
+
+    endpoints = [
+        "https://api.siliconflow.cn/v1/audio/transcriptions",
+        "https://api.siliconflow.com/v1/audio/transcriptions"
+    ]
+
+    for endpoint in endpoints:
+        try:
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
+                data = {"model": "FunAudioLLM/SenseVoiceSmall"}
+                headers = {"Authorization": f"Bearer {api_key}"}
+                resp = await client.post(endpoint, headers=headers, files=files, data=data)
+                if resp.status_code == 200:
+                    return resp.json().get("text")
+        except Exception as e:
+            logger.warning(f"SiliconFlow SenseVoice STT failed on {endpoint}: {e}")
+
+    return None
+
+
 async def generate_triage_insights(
     raw_transcript: str,
     emotion_probs: Dict[str, float],

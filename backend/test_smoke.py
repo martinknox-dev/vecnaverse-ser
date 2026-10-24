@@ -12,13 +12,31 @@ def test_vecna_pulse_phase2():
     client = TestClient(app)
 
     # 1. Test GET /api/health
-    print("[1/6] Testing GET /api/health...")
+    print("[1/7] Testing GET /api/health...")
     health_resp = client.get("/api/health")
     assert health_resp.status_code == 200, f"Health check failed: {health_resp.text}"
     health_data = health_resp.json()
     assert health_data.get("status") == "ok"
     assert "disclaimer" in health_data
     print(" -> Health check PASSED:", health_data["status"], health_data["engine"])
+
+    # 2. Test GET /api/hardware-info (Hardware Auto-Detector)
+    print("[2/7] Testing GET /api/hardware-info...")
+    hw_resp = client.get("/api/hardware-info")
+    assert hw_resp.status_code == 200, f"Hardware info failed: {hw_resp.text}"
+    hw_data = hw_resp.json()
+    assert "cpu_cores" in hw_data and hw_data["cpu_cores"] > 0
+    assert "ram_total_gb" in hw_data
+    assert "gpu_accelerator" in hw_data
+    assert "recommended_tier" in hw_data
+    print(f" -> Hardware info PASSED: {hw_data['cpu_cores']} Cores | {hw_data['ram_total_gb']}GB RAM | Tier={hw_data['recommended_tier']}")
+
+    # 3. Test GET /api/sample-audio/panic_victim
+    print("[3/7] Testing GET /api/sample-audio/panic_victim...")
+    audio_resp = client.get("/api/sample-audio/panic_victim")
+    assert audio_resp.status_code == 200, f"Sample audio failed: {audio_resp.status_code}"
+    assert len(audio_resp.content) > 10000, "Sample audio payload too small"
+    print(f" -> Sample audio PASSED: received {len(audio_resp.content)} bytes audio/wav")
 
     # 2. Test GET /api/mock-scenarios
     print("[2/6] Testing GET /api/mock-scenarios...")

@@ -2,16 +2,20 @@ import time
 import json
 import uuid
 import asyncio
+import os
+import platform
+import ctypes
 from typing import Optional, Dict, Any
 from pydantic import BaseModel
-from fastapi import FastAPI, UploadFile, File, Form, Header, WebSocket, WebSocketDisconnect, Body
+from fastapi import FastAPI, UploadFile, File, Form, Header, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 
-from .emotion_engine import process_audio
+from .emotion_engine import process_audio, _find_model_paths
 from .triage_agent import (
     generate_triage_insights,
     call_groq_whisper,
+    call_siliconflow_stt,
     process_voice_copilot,
     format_forensic_case_report,
     INDICATIVE_DISCLAIMER
@@ -20,8 +24,8 @@ from .mock_generator import get_mock_scenarios, SCENARIOS
 
 app = FastAPI(
     title="VECNA-Pulse Real-Time SER & Cybercrime Triage API",
-    version="2.0.0",
-    description="Real-Time Speech Emotion Analysis, Hybrid ONNX Biometrics & Decision Support for Cybercrime Investigation"
+    version="3.0.0",
+    description="Real-Time Speech Emotion Analysis, Hardware-Adaptive Engine & Cybercrime Investigation Console"
 )
 
 # Enable CORS for frontend and external integrations
@@ -51,14 +55,15 @@ async def health_check():
     """System health check endpoint."""
     return {
         "status": "ok",
-        "engine": "VECNA-Pulse SER v2.0 (Hybrid ONNX + Acoustic Biomarkers)",
+        "engine": "VECNA-Pulse SER v3.0 (Hardware-Adaptive + Hybrid ONNX)",
         "features": [
+            "Hardware Auto-Detector & Adaptive Model Tiering",
             "Acoustic Biomarkers (F0, Jitter/Tremor %, Syllables/Sec, RMS dB)",
             "Hybrid ONNX Integration (Sherpa-ONNX SenseVoice + Silero VAD)",
             "Voice Activity Ratio & Extraction Confidence Rating",
             "Regex PII Masking (Phone, Aadhaar, OTP, Acct)",
             "Hybrid Urgency Scoring (60% SER + 40% Threat Keywords)",
-            "BYOK Support (Groq, OpenRouter, SiliconFlow) + 100% Offline Engine",
+            "SiliconFlow, Groq & OpenRouter First-Class STT/LLM BYOK Connectors",
             "WebSocket Real-Time Stream (Mic, Escalation Sim, Multi-Call Surge)",
             "Wispr Voice Co-Pilot & 1930 NCRP Freeze Ticket Generator",
             "Forensic Case Report Evidence Export (.md & .json)"
@@ -67,10 +72,111 @@ async def health_check():
     }
 
 
+@app.get("/api/hardware-info")
+async def hardware_info():
+    """
+    Host Hardware Profiler:
+    Detects CPU cores, total system memory, GPU acceleration, and local ONNX model availability.
+    """
+    cores = os.cpu_count() or 4
+    total_ram_gb = 8.0
+
+    try:
+        if platform.system() == "Windows":
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            total_ram_gb = round(stat.ullTotalPhys / (1024 ** 3), 1)
+        else:
+            total_ram_gb = round(os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024 ** 3), 1)
+    except Exception:
+        total_ram_gb = 8.0
+
+    gpu_desc = "Standard Host Compute"
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+        if "CUDAExecutionProvider" in providers:
+            gpu_desc = "NVIDIA CUDA (ONNX Runtime)"
+        elif "DmlExecutionProvider" in providers:
+            gpu_desc = "DirectML GPU (ONNX Runtime)"
+        elif "CoreMLExecutionProvider" in providers:
+            gpu_desc = "Apple Silicon Neural Engine"
+    except Exception:
+        pass
+
+    sv_model, _, vad_model = _find_model_paths()
+
+    rec_tier = "MID_RANGE"
+    if cores >= 8 and total_ram_gb >= 12:
+        rec_tier = "HIGH_END"
+    elif cores <= 4 or total_ram_gb <= 4:
+        rec_tier = "LOW_END"
+
+    return {
+        "status": "online",
+        "host_os": f"{platform.system()} {platform.release()}",
+        "cpu_arch": platform.machine(),
+        "cpu_cores": cores,
+        "cpu_processor": platform.processor() or "Multi-Core Host CPU",
+        "ram_total_gb": total_ram_gb,
+        "gpu_accelerator": gpu_desc,
+        "models_detected": {
+            "sense_voice_onnx": bool(sv_model),
+            "silero_vad_onnx": bool(vad_model)
+        },
+        "recommended_tier": rec_tier
+    }
+
+
 @app.get("/api/mock-scenarios")
 async def mock_scenarios():
     """Return pre-computed cybercrime scenarios sorted descending by urgency_score."""
     return get_mock_scenarios()
+
+
+@app.get("/api/sample-audio/{scenario}")
+async def get_sample_audio(scenario: str):
+    """
+    Serve synthesized sample WAV audio for playable interactive scenarios.
+    """
+    samples_dir = os.path.join(os.path.dirname(__file__), "..", "samples")
+    scenario_clean = scenario.lower().replace("-", "_")
+
+    file_mapping = {
+        "digital_arrest": "panic_victim.wav",
+        "panic_victim": "panic_victim.wav",
+        "call_2026_0891": "panic_victim.wav",
+        "upi_fraud": "nervous_caller.wav",
+        "nervous_caller": "nervous_caller.wav",
+        "call_2026_0892": "nervous_caller.wav",
+        "distressed_victim": "angry_caller.wav",
+        "sextortion": "angry_caller.wav",
+        "angry_caller": "angry_caller.wav",
+        "call_2026_0893": "angry_caller.wav",
+        "informant": "nervous_caller.wav",
+        "call_2026_0894": "nervous_caller.wav",
+    }
+
+    target_file = file_mapping.get(scenario_clean, "panic_victim.wav")
+    file_path = os.path.join(samples_dir, target_file)
+
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail=f"Audio sample '{scenario}' not found")
+
+    return FileResponse(file_path, media_type="audio/wav", filename=target_file)
 
 
 @app.post("/api/analyze-audio")
@@ -104,11 +210,16 @@ async def analyze_audio(
     api_key = x_api_key or ""
     transcript_text = transcript_hint or onnx_transcript or ""
 
-    # If user provided Groq BYOK key and no transcript hint, attempt Whisper transcription
-    if not transcript_text and provider.lower() == "groq" and api_key:
-        whisper_text = await call_groq_whisper(api_key, audio_bytes)
-        if whisper_text:
-            transcript_text = whisper_text
+    # Call BYOK STT if provided and no transcript hint
+    if not transcript_text and api_key:
+        if provider.lower() == "siliconflow":
+            sf_text = await call_siliconflow_stt(api_key, audio_bytes)
+            if sf_text:
+                transcript_text = sf_text
+        elif provider.lower() == "groq":
+            whisper_text = await call_groq_whisper(api_key, audio_bytes)
+            if whisper_text:
+                transcript_text = whisper_text
 
     # Default heuristic transcript based on vocal indicators if still blank
     if not transcript_text:
@@ -256,13 +367,10 @@ async def websocket_live_call(websocket: WebSocket):
                 action = data.get("action")
 
                 if action == "simulate_surge":
-                    # Simulate 4 concurrent incoming cybercrime calls with live updates
                     base_scenarios = get_mock_scenarios()
                     now_ms = int(time.time() * 1000)
 
-                    # Dynamic variations for the surge
                     surge_calls = []
-                    # 1. Digital Arrest caller escalates to 96
                     c1 = dict(base_scenarios[0])
                     c1["call_id"] = f"SURGE-{uuid.uuid4().hex[:4].upper()}"
                     c1["timestamp_ms"] = now_ms - 10000
@@ -270,7 +378,6 @@ async def websocket_live_call(websocket: WebSocket):
                     c1["urgency_level"] = "CRITICAL"
                     surge_calls.append(c1)
 
-                    # 2. Sextortion caller at 93
                     c2 = dict(base_scenarios[1])
                     c2["call_id"] = f"SURGE-{uuid.uuid4().hex[:4].upper()}"
                     c2["timestamp_ms"] = now_ms - 25000
@@ -278,7 +385,6 @@ async def websocket_live_call(websocket: WebSocket):
                     c2["urgency_level"] = "CRITICAL"
                     surge_calls.append(c2)
 
-                    # 3. Active UPI fraud caller jumps to 88
                     c3 = dict(base_scenarios[2])
                     c3["call_id"] = f"SURGE-{uuid.uuid4().hex[:4].upper()}"
                     c3["timestamp_ms"] = now_ms - 50000
@@ -286,7 +392,6 @@ async def websocket_live_call(websocket: WebSocket):
                     c3["urgency_level"] = "CRITICAL"
                     surge_calls.append(c3)
 
-                    # 4. Mule account informant at 62
                     c4 = dict(base_scenarios[3])
                     c4["call_id"] = f"SURGE-{uuid.uuid4().hex[:4].upper()}"
                     c4["timestamp_ms"] = now_ms - 90000
@@ -294,12 +399,10 @@ async def websocket_live_call(websocket: WebSocket):
                     c4["urgency_level"] = "HIGH"
                     surge_calls.append(c4)
 
-                    # Send each individual call update
                     for call_item in surge_calls:
                         await websocket.send_text(json.dumps(call_item))
                         await asyncio.sleep(0.15)
 
-                    # Also send combined batch frame for queue re-ordering
                     batch_payload = {
                         "action": "surge_batch",
                         "calls": sorted(surge_calls, key=lambda x: x["urgency_score"], reverse=True),
@@ -320,12 +423,6 @@ async def websocket_live_call(websocket: WebSocket):
                     call_id = f"LIVE-{uuid.uuid4().hex[:4].upper()}"
                     base_time = int(time.time() * 1000)
 
-                    # Stream 5 sequential 2-second time-slices showing emotion escalation
-                    # Step 1: Nervous hesitation (urgency ~60)
-                    # Step 2: Confusion / rising tremor (urgency ~72)
-                    # Step 3: Fear spike (urgency ~85)
-                    # Step 4: Active distress (urgency ~92)
-                    # Step 5: Full critical panic (urgency ~96)
                     escalation_steps = [
                         {"emotion": "nervousness", "urgency": 62, "pitch_mod": -25.0, "jitter_mod": -1.2},
                         {"emotion": "nervousness", "urgency": 74, "pitch_mod": -10.0, "jitter_mod": -0.5},

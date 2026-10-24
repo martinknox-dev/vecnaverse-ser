@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import SettingsModal from './components/SettingsModal';
+import HardwareWizardModal from './components/HardwareWizardModal';
 import CallQueue from './components/CallQueue';
 import ForensicsPanel from './components/ForensicsPanel';
 import DecisionSupport from './components/DecisionSupport';
 import { FALLBACK_SCENARIOS, INDICATIVE_DISCLAIMER } from './mockData';
+import { detectBrowserHardware, fetchBackendHardware } from './services/hardwareEngine';
+import { analyzeAudioClientSide } from './services/clientSerEngine';
+import { saveCaseToDevice, getAllSavedCases, deleteSavedCase } from './services/caseDb';
+import { callSiliconFlowSTT, callSiliconFlowChat } from './services/cloudServices';
 
 export default function App() {
   const [calls, setCalls] = useState(FALLBACK_SCENARIOS);
@@ -12,22 +17,80 @@ export default function App() {
   const [isMockMode, setIsMockMode] = useState(() => {
     return new URLSearchParams(window.location.search).get('mock') === 'true';
   });
+
+  // Modal states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHardwareWizardOpen, setIsHardwareWizardOpen] = useState(false);
+
+  // Settings & Tier
   const [provider, setProvider] = useState(() => {
     return localStorage.getItem('vecna_provider') || 'offline';
   });
   const [apiKey, setApiKey] = useState(() => {
     return localStorage.getItem('vecna_api_key') || '';
   });
+  const [currentTier, setCurrentTier] = useState(() => {
+    return localStorage.getItem('vecna_model_tier') || 'MID_RANGE';
+  });
+
+  // Hardware telemetry & Storage
+  const [hardwareInfo, setHardwareInfo] = useState(null);
+  const [storageInfo, setStorageInfo] = useState(null);
+
+  // Status & loading
   const [backendConnected, setBackendConnected] = useState(false);
   const [isLoadingQueue, setIsLoadingQueue] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSurgeActive, setIsSurgeActive] = useState(false);
+
+  // Copilot & Cases
   const [copilotData, setCopilotData] = useState(null);
   const [isProcessingCopilot, setIsProcessingCopilot] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [savedCases, setSavedCases] = useState([]);
+  const [isCurrentCaseSaved, setIsCurrentCaseSaved] = useState(false);
 
   const wsRef = useRef(null);
+
+  // Hardware Profiling on mount
+  useEffect(() => {
+    const initHardware = async () => {
+      const browserHw = await detectBrowserHardware();
+      const backendHw = await fetchBackendHardware();
+
+      const merged = {
+        ...browserHw,
+        backend: backendHw,
+        cores: backendHw?.cpu_cores || browserHw.cores,
+        memory: backendHw?.ram_total_gb || browserHw.memory,
+        recommendedTier: backendHw?.recommended_tier || browserHw.recommendedTier,
+      };
+
+      setHardwareInfo(merged);
+      setStorageInfo(browserHw.storage);
+
+      // Auto-set recommended tier if user hasn't chosen one yet
+      const savedTier = localStorage.getItem('vecna_model_tier');
+      if (!savedTier) {
+        setCurrentTier(merged.recommendedTier);
+        localStorage.setItem('vecna_model_tier', merged.recommendedTier);
+      }
+
+      // Show wizard on first visit
+      const wizardDone = localStorage.getItem('vecna_hardware_setup_done');
+      if (!wizardDone) {
+        setIsHardwareWizardOpen(true);
+      }
+    };
+
+    initHardware();
+    loadSavedCases();
+  }, []);
+
+  const loadSavedCases = async () => {
+    const list = await getAllSavedCases();
+    setSavedCases(list);
+  };
 
   // Check backend health & fetch scenarios on mount
   useEffect(() => {
@@ -63,10 +126,6 @@ export default function App() {
       socket = new WebSocket(wsUrl);
       wsRef.current = socket;
 
-      socket.onopen = () => {
-        // Connected
-      };
-
       socket.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
@@ -96,13 +155,7 @@ export default function App() {
           console.error('Error parsing live WS payload', e);
         }
       };
-
-      socket.onerror = () => {
-        // Silently handle WS fallback
-      };
-    } catch (e) {
-      // Ignore
-    }
+    } catch (e) {}
 
     return () => {
       if (socket && socket.readyState === WebSocket.OPEN) {
@@ -123,7 +176,6 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.warn('Backend not responding to /api/mock-scenarios, using local fallback.');
       setCalls(FALLBACK_SCENARIOS);
       setActiveCall(FALLBACK_SCENARIOS[0]);
     } finally {
@@ -133,7 +185,9 @@ export default function App() {
 
   const handleSelectCall = (call) => {
     setActiveCall(call);
-    setCopilotData(null); // Reset ticket draft for new call
+    setCopilotData(null);
+    const isSaved = savedCases.some((c) => c.call_id === call.call_id);
+    setIsCurrentCaseSaved(isSaved);
   };
 
   const handleRefreshQueue = () => {
@@ -145,8 +199,24 @@ export default function App() {
     }
   };
 
+  // Audio Analysis: Supports Hybrid Backend, Client-Side Pure Web Audio DSP, or SiliconFlow Cloud BYOK
   const handleAnalyzeAudioFile = async (file, transcriptHint) => {
     setIsAnalyzing(true);
+
+    // If pure client tier or backend offline, run 100% on-device Web Audio DSP!
+    if (currentTier === 'LOW_END' || (!backendConnected && !isMockMode)) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const clientPayload = await analyzeAudioClientSide(arrayBuffer, 16000, transcriptHint);
+        setActiveCall(clientPayload);
+        setCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
+      } catch (e) {
+        console.error('Client DSP analysis failed:', e);
+      } finally {
+        setIsAnalyzing(false);
+      }
+      return;
+    }
 
     if (isMockMode) {
       setTimeout(() => {
@@ -184,9 +254,7 @@ export default function App() {
         body: formData,
       });
 
-      if (!res.ok) {
-        throw new Error(`Server returned ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
 
       const payload = await res.json();
       setActiveCall(payload);
@@ -196,8 +264,16 @@ export default function App() {
         return updated.sort((a, b) => b.urgency_score - a.urgency_score);
       });
     } catch (err) {
-      alert('Forensic audio analysis failed: ' + err.message + '. Falling back to local offline scenario.');
-      setActiveCall(FALLBACK_SCENARIOS[0]);
+      // Graceful fallback to client-side engine if backend fails
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const clientPayload = await analyzeAudioClientSide(arrayBuffer, 16000, transcriptHint);
+        setActiveCall(clientPayload);
+        setCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
+      } catch (inner) {
+        alert('Forensic audio analysis failed. Using fallback scenario.');
+        setActiveCall(FALLBACK_SCENARIOS[0]);
+      }
     } finally {
       setIsAnalyzing(false);
     }
@@ -236,7 +312,6 @@ export default function App() {
       return;
     }
 
-    // Local fallback for surge
     const now = Date.now();
     const surged = [
       {
@@ -283,7 +358,7 @@ export default function App() {
   const handleProcessVoiceCopilot = async (officerNote) => {
     setIsProcessingCopilot(true);
 
-    if (isMockMode) {
+    if (isMockMode || !backendConnected) {
       setTimeout(() => {
         const ticketId = `1930-NCRP-${Math.floor(100000 + Math.random() * 900000)}`;
         const mockDraft = {
@@ -347,10 +422,10 @@ export default function App() {
 
     try {
       let reportData;
-      if (isMockMode) {
+      if (isMockMode || !backendConnected) {
         reportData = {
           filename_base: `VECNA-CASE-REPORT-${activeCall.call_id}`,
-          markdown_report: `# VECNA-Pulse Forensic Case Dossier\n**Case ID:** ${activeCall.call_id}\n**Urgency:** ${activeCall.urgency_score} (${activeCall.urgency_level})\n**Dominant Emotion:** ${activeCall.dominant_emotion}\n\n## Legal Notice\n${INDICATIVE_DISCLAIMER}`,
+          markdown_report: `# VECNA-Pulse Forensic Case Dossier\n**Case ID:** ${activeCall.call_id}\n**Urgency:** ${activeCall.urgency_score} (${activeCall.urgency_level})\n**Dominant Emotion:** ${activeCall.dominant_emotion}\n\n## Transcript\n> "${activeCall.transcript?.raw_redacted}"\n\n## Legal Notice\n${INDICATIVE_DISCLAIMER}`,
           json_packet: { activeCall, copilotData },
         };
       } else {
@@ -397,19 +472,41 @@ export default function App() {
     }
   };
 
+  // Persistent On-Device Case Saving (IndexedDB)
+  const handleSaveCaseLocally = async (casePayload) => {
+    try {
+      await saveCaseToDevice(casePayload);
+      setIsCurrentCaseSaved(true);
+      await loadSavedCases();
+    } catch (e) {
+      alert('Could not save case locally: ' + e.message);
+    }
+  };
+
+  const handleDeleteSavedCase = async (callId) => {
+    await deleteSavedCase(callId);
+    if (activeCall.call_id === callId) {
+      setIsCurrentCaseSaved(false);
+    }
+    await loadSavedCases();
+  };
+
   return (
-    <div className="min-h-screen flex flex-col bg-cyber-dark text-slate-100">
+    <div className="min-h-screen flex flex-col bg-[#07070c] text-slate-100 font-sans selection:bg-cyan-500 selection:text-black">
       {/* Top Header */}
       <Header
         isMockMode={isMockMode}
         setIsMockMode={setIsMockMode}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenHardwareWizard={() => setIsHardwareWizardOpen(true)}
         provider={provider}
         backendConnected={backendConnected}
+        currentTier={currentTier}
+        storageInfo={storageInfo}
       />
 
       {/* Main 3-Column Dashboard Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 md:p-4 grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
         {/* Left Column: Priority Call Queue (3 cols on lg) */}
         <div className="lg:col-span-3 h-[460px] lg:h-auto min-h-[420px]">
           <CallQueue
@@ -420,6 +517,8 @@ export default function App() {
             onSimulateSurge={handleSimulateSurge}
             isLoading={isLoadingQueue}
             isSurgeActive={isSurgeActive}
+            savedCases={savedCases}
+            onDeleteSavedCase={handleDeleteSavedCase}
           />
         </div>
 
@@ -443,6 +542,8 @@ export default function App() {
             isProcessingCopilot={isProcessingCopilot}
             onExportReport={handleExportReport}
             isExporting={isExporting}
+            onSaveCaseLocally={handleSaveCaseLocally}
+            isCaseSaved={isCurrentCaseSaved}
           />
         </div>
       </main>
@@ -455,6 +556,20 @@ export default function App() {
         setProvider={setProvider}
         apiKey={apiKey}
         setApiKey={setApiKey}
+      />
+
+      {/* Hardware & Model Setup Wizard Modal */}
+      <HardwareWizardModal
+        isOpen={isHardwareWizardOpen}
+        onClose={() => setIsHardwareWizardOpen(false)}
+        hardwareInfo={hardwareInfo}
+        currentTier={currentTier}
+        onSelectTier={(tier) => setCurrentTier(tier)}
+        storageInfo={storageInfo}
+        onRefreshStorage={async () => {
+          const hw = await detectBrowserHardware();
+          setStorageInfo(hw.storage);
+        }}
       />
     </div>
   );
