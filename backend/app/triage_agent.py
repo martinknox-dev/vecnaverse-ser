@@ -330,7 +330,7 @@ Respond ONLY with valid JSON in this exact shape:
                 "temperature": 0.2,
             }
         elif provider.lower() == "siliconflow":
-            endpoint = "https://api.siliconflow.cn/v1/chat/completions"
+            endpoint = "https://api.siliconflow.com/v1/chat/completions"
             headers["Authorization"] = f"Bearer {api_key}"
             payload = {
                 "model": "Qwen/Qwen2.5-7B-Instruct",
@@ -384,22 +384,18 @@ async def call_siliconflow_stt(api_key: str, audio_bytes: bytes) -> Optional[str
     if not api_key:
         return None
 
-    endpoints = [
-        "https://api.siliconflow.cn/v1/audio/transcriptions",
-        "https://api.siliconflow.com/v1/audio/transcriptions"
-    ]
+    endpoint = "https://api.siliconflow.com/v1/audio/transcriptions"
 
-    for endpoint in endpoints:
-        try:
-            async with httpx.AsyncClient(timeout=12.0) as client:
-                files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
-                data = {"model": "FunAudioLLM/SenseVoiceSmall"}
-                headers = {"Authorization": f"Bearer {api_key}"}
-                resp = await client.post(endpoint, headers=headers, files=files, data=data)
-                if resp.status_code == 200:
-                    return resp.json().get("text")
-        except Exception as e:
-            logger.warning(f"SiliconFlow SenseVoice STT failed on {endpoint}: {e}")
+    try:
+        async with httpx.AsyncClient(timeout=12.0) as client:
+            files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
+            data = {"model": "FunAudioLLM/SenseVoiceSmall"}
+            headers = {"Authorization": f"Bearer {api_key}"}
+            resp = await client.post(endpoint, headers=headers, files=files, data=data)
+            if resp.status_code == 200:
+                return resp.json().get("text")
+    except Exception as e:
+        logger.warning(f"SiliconFlow SenseVoice STT failed on {endpoint}: {e}")
 
     return None
 

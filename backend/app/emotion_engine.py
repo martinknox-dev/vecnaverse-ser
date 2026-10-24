@@ -262,6 +262,8 @@ def compute_acoustic_biomarkers(y: np.ndarray, sr: int = 16000) -> Dict[str, Any
     max_amp = np.max(np.abs(y))
     y_norm = y / max_amp if max_amp > 1e-4 else y
 
+    voiced_f0 = np.array([])
+
     # 1. Pitch (F0) via librosa.yin
     try:
         f0 = librosa.yin(y_norm, fmin=60, fmax=450, sr=sr)

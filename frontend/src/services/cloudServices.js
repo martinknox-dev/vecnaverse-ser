@@ -11,26 +11,21 @@ export async function callSiliconFlowSTT(apiKey, audioBlob) {
   formData.append('file', audioBlob, 'audio.wav');
   formData.append('model', 'FunAudioLLM/SenseVoiceSmall');
 
-  const endpoints = [
-    'https://api.siliconflow.cn/v1/audio/transcriptions',
-    'https://api.siliconflow.com/v1/audio/transcriptions',
-  ];
+  const endpoint = 'https://api.siliconflow.com/v1/audio/transcriptions';
 
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: formData,
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data.text || '';
-      }
-    } catch (e) {}
-  }
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.text || '';
+    }
+  } catch (e) {}
   return '';
 }
 
@@ -60,31 +55,26 @@ export async function callGroqWhisperSTT(apiKey, audioBlob) {
 export async function callSiliconFlowChat(apiKey, prompt) {
   if (!apiKey) throw new Error('SiliconFlow API key required');
 
-  const endpoints = [
-    'https://api.siliconflow.cn/v1/chat/completions',
-    'https://api.siliconflow.com/v1/chat/completions',
-  ];
+  const endpoint = 'https://api.siliconflow.com/v1/chat/completions';
 
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'Qwen/Qwen2.5-7B-Instruct',
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.2,
-        }),
-      });
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'Qwen/Qwen2.5-7B-Instruct',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+      }),
+    });
 
-      if (res.ok) {
-        const data = await res.json();
-        return data.choices?.[0]?.message?.content || '';
-      }
-    } catch (e) {}
-  }
+    if (res.ok) {
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || '';
+    }
+  } catch (e) {}
   return '';
 }
