@@ -221,33 +221,13 @@ async def analyze_audio(
             if whisper_text:
                 transcript_text = whisper_text
 
-    # Default heuristic transcript based on vocal indicators if still blank
+    # If no transcript is provided and neither SenseVoice nor Whisper recognized speech,
+    # provide a realistic forensic placeholder rather than inventing a false scam claim
     if not transcript_text:
-        if dominant_emotion == "fear" or biomarkers["jitter_tremor_pct"] > 3.0:
-            transcript_text = (
-                "Sir please help! Someone claiming to be police put me under digital arrest "
-                "demanding ₹80,000 and my OTP 9341 immediately from phone 9876543210!"
-            )
-        elif dominant_emotion == "distress":
-            transcript_text = (
-                "Help me! Someone called pretending to be bank staff and deducted ₹45,000 from my "
-                "account ending 849201948201 via unauthorized UPI transfer right now!"
-            )
-        elif dominant_emotion == "anger":
-            transcript_text = (
-                "They hacked my device and installed AnyDesk without permission, claiming they will leak "
-                "my private photos if I don't pay blackmail extortion money!"
-            )
-        elif dominant_emotion == "nervousness":
-            transcript_text = (
-                "I am calling to report a telegram mule account network operating at bank account "
-                "ending 938201948. Please keep my identity safe."
-            )
-        else:
-            transcript_text = (
-                "Hello, I am reporting an unexpected bank SMS transaction on account ending 12049281. "
-                "Need verification on whether this is genuine."
-            )
+        transcript_text = (
+            f"Voice audio analyzed. Fundamental pitch at {biomarkers['pitch_hz']} Hz with "
+            f"{biomarkers['jitter_tremor_pct']}% micro-tremor. No explicit threat keywords identified in audio signal."
+        )
 
     # 3. Generate PII redactions, threat keywords, urgency score, and triage insights
     transcript_info, triage_insights, urgency_score, urgency_level = await generate_triage_insights(

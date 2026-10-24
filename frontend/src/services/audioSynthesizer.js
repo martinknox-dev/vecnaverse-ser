@@ -1,75 +1,49 @@
 /**
- * VECNA-Pulse Playable Cybercrime Audio Synthesizer & Synced Playback Engine
- * Plays backend WAV files or synthesizes realistic emergency distress calls with Web Audio
- * telephone filters and Web Speech API synchronized with the SER emotion timeline.
+ * Voice Audio Playback & Real-Time Synced Speech Engine
+ * Speaks scenario transcripts clearly using natural browser speech synthesis
+ * and plays uploaded audio files cleanly with zero siren/noise distortion.
  */
 
 class CyberAudioPlayer {
   constructor() {
     this.audioElement = null;
     this.speechUtterance = null;
-    this.audioCtx = null;
-    this.noiseNode = null;
-    this.gainNode = null;
     this.isPlaying = false;
     this.currentTime = 0;
     this.duration = 10;
     this.timeUpdateCallback = null;
     this.endedCallback = null;
     this.intervalId = null;
-    this.volume = 0.8;
+    this.volume = 0.9;
   }
 
-  initAudioContext() {
-    if (!this.audioCtx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) {
-        this.audioCtx = new AudioCtx();
-        this.gainNode = this.audioCtx.createGain();
-        this.gainNode.gain.value = 0.05 * this.volume;
-        this.gainNode.connect(this.audioCtx.destination);
-      }
-    }
+  cleanSpokenText(raw) {
+    if (!raw) return 'Emergency call audio stream in progress.';
+    // Replace redacted tokens with smooth spoken words
+    return raw
+      .replace(/\[REDACTED-PHONE\]/gi, 'masked phone number')
+      .replace(/\[REDACTED-Aadhaar\]/gi, 'masked identity number')
+      .replace(/\[REDACTED-OTP\]/gi, 'one time password')
+      .replace(/\[REDACTED-ACCT\]/gi, 'bank account number')
+      .replace(/₹(\d+)/g, '$1 rupees')
+      .trim();
   }
 
-  startTelephoneStatic() {
-    try {
-      this.initAudioContext();
-      if (!this.audioCtx) return;
-
-      // Create white noise buffer
-      const bufferSize = this.audioCtx.sampleRate * 2;
-      const noiseBuffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
-      const output = noiseBuffer.getChannelData(0);
-      for (let i = 0; i < bufferSize; i++) {
-        output[i] = Math.random() * 2 - 1;
-      }
-
-      const whiteNoise = this.audioCtx.createBufferSource();
-      whiteNoise.buffer = noiseBuffer;
-      whiteNoise.loop = true;
-
-      // Telephone bandpass filter (300Hz - 3400Hz)
-      const bandpass = this.audioCtx.createBiquadFilter();
-      bandpass.type = 'bandpass';
-      bandpass.frequency.value = 1200;
-      bandpass.Q.value = 1.0;
-
-      whiteNoise.connect(bandpass);
-      bandpass.connect(this.gainNode);
-      whiteNoise.start(0);
-      this.noiseNode = whiteNoise;
-    } catch (e) {}
-  }
-
-  stopTelephoneStatic() {
-    if (this.noiseNode) {
-      try {
-        this.noiseNode.stop();
-        this.noiseNode.disconnect();
-      } catch (e) {}
-      this.noiseNode = null;
-    }
+  getBestVoice() {
+    if (!('speechSynthesis' in window)) return null;
+    const voices = window.speechSynthesis.getVoices() || [];
+    // Prefer English voices with natural quality
+    const enVoice = voices.find(
+      (v) =>
+        v.lang.startsWith('en') &&
+        (v.name.includes('Natural') ||
+          v.name.includes('Google') ||
+          v.name.includes('Samantha') ||
+          v.name.includes('David') ||
+          v.name.includes('Jenny') ||
+          v.name.includes('Zira'))
+    ) || voices.find((v) => v.lang.startsWith('en')) || voices[0];
+    return enVoice || null;
   }
 
   async playScenario(scenario, onTimeUpdate, onEnded) {
@@ -77,56 +51,38 @@ class CyberAudioPlayer {
     this.timeUpdateCallback = onTimeUpdate;
     this.endedCallback = onEnded;
 
-    const callId = scenario.call_id || 'CALL-2026-0891';
-    let sampleUrl = `/api/sample-audio/${scenario.dominant_emotion || 'panic_victim'}`;
-    if (callId.includes('0891')) sampleUrl = '/api/sample-audio/panic_victim';
-    else if (callId.includes('0892')) sampleUrl = '/api/sample-audio/nervous_caller';
-    else if (callId.includes('0893')) sampleUrl = '/api/sample-audio/angry_caller';
-    else if (callId.includes('0894')) sampleUrl = '/api/sample-audio/nervous_caller';
+    const rawText = scenario.transcript?.raw_redacted || 'Emergency response call in progress.';
+    const textToSpeak = this.cleanSpokenText(rawText);
 
-    // Try HTML5 Audio from backend
-    try {
-      const audio = new Audio(sampleUrl);
-      audio.volume = this.volume;
-      this.audioElement = audio;
-
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        await playPromise;
-        this.isPlaying = true;
-        this.duration = audio.duration || 10;
-
-        audio.ontimeupdate = () => {
-          this.currentTime = audio.currentTime;
-          this.duration = audio.duration || this.duration;
-          if (this.timeUpdateCallback) {
-            this.timeUpdateCallback(this.currentTime, this.duration);
-          }
-        };
-
-        audio.onended = () => {
-          this.stop();
-          if (this.endedCallback) this.endedCallback();
-        };
-        return;
-      }
-    } catch (e) {
-      // Backend audio unreachable; fallback to speech synthesizer + static
+    if (!('speechSynthesis' in window)) {
+      this.isPlaying = false;
+      return;
     }
 
-    // Synthesizer Fallback: Web Speech API + Telephone line hum
-    this.startTelephoneStatic();
-    this.isPlaying = true;
-    const textToSpeak = scenario.transcript?.raw_redacted || 'Emergency cybercrime distress call in progress.';
-    this.duration = Math.max(8, textToSpeak.length * 0.07);
-    this.currentTime = 0;
-
-    if ('speechSynthesis' in window) {
+    try {
       window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(textToSpeak.replace(/\[REDACTED-[A-Za-z]+\]/g, 'hidden'));
-      utter.rate = scenario.dominant_emotion === 'fear' ? 1.2 : 1.05;
-      utter.pitch = scenario.dominant_emotion === 'fear' ? 1.35 : 1.1;
+      const utter = new SpeechSynthesisUtterance(textToSpeak);
+      const voice = this.getBestVoice();
+      if (voice) utter.voice = voice;
+
+      utter.rate = 1.0;
+      utter.pitch = 1.0;
       utter.volume = this.volume;
+
+      // Estimate duration based on word count (~150 words per minute)
+      const wordCount = textToSpeak.split(/\s+/).length;
+      this.duration = Math.max(5, Math.round((wordCount / 140) * 60));
+      this.currentTime = 0;
+      this.isPlaying = true;
+
+      const startTime = Date.now();
+      this.intervalId = setInterval(() => {
+        const elapsed = (Date.now() - startTime) / 1000;
+        this.currentTime = Math.min(this.duration, elapsed);
+        if (this.timeUpdateCallback) {
+          this.timeUpdateCallback(this.currentTime, this.duration);
+        }
+      }, 100);
 
       utter.onend = () => {
         this.stop();
@@ -138,21 +94,11 @@ class CyberAudioPlayer {
         if (this.endedCallback) this.endedCallback();
       };
 
-      window.speechSynthesis.speak(utter);
       this.speechUtterance = utter;
+      window.speechSynthesis.speak(utter);
+    } catch (e) {
+      this.stop();
     }
-
-    // Interval to drive time updates
-    const startMs = Date.now();
-    this.intervalId = setInterval(() => {
-      this.currentTime = (Date.now() - startMs) / 1000;
-      if (this.currentTime >= this.duration) {
-        this.stop();
-        if (this.endedCallback) this.endedCallback();
-      } else if (this.timeUpdateCallback) {
-        this.timeUpdateCallback(this.currentTime, this.duration);
-      }
-    }, 100);
   }
 
   async playUploadedFile(file, onTimeUpdate, onEnded) {
@@ -160,28 +106,32 @@ class CyberAudioPlayer {
     this.timeUpdateCallback = onTimeUpdate;
     this.endedCallback = onEnded;
 
-    const fileUrl = URL.createObjectURL(file);
-    const audio = new Audio(fileUrl);
-    audio.volume = this.volume;
-    this.audioElement = audio;
+    try {
+      const fileUrl = URL.createObjectURL(file);
+      const audio = new Audio(fileUrl);
+      audio.volume = this.volume;
+      this.audioElement = audio;
 
-    await audio.play();
-    this.isPlaying = true;
-    this.duration = audio.duration || 10;
+      await audio.play();
+      this.isPlaying = true;
+      this.duration = audio.duration || 10;
 
-    audio.ontimeupdate = () => {
-      this.currentTime = audio.currentTime;
-      this.duration = audio.duration || this.duration;
-      if (this.timeUpdateCallback) {
-        this.timeUpdateCallback(this.currentTime, this.duration);
-      }
-    };
+      audio.ontimeupdate = () => {
+        this.currentTime = audio.currentTime;
+        this.duration = audio.duration || this.duration;
+        if (this.timeUpdateCallback) {
+          this.timeUpdateCallback(this.currentTime, this.duration);
+        }
+      };
 
-    audio.onended = () => {
+      audio.onended = () => {
+        this.stop();
+        URL.revokeObjectURL(fileUrl);
+        if (this.endedCallback) this.endedCallback();
+      };
+    } catch (e) {
       this.stop();
-      URL.revokeObjectURL(fileUrl);
-      if (this.endedCallback) this.endedCallback();
-    };
+    }
   }
 
   pause() {
@@ -191,7 +141,6 @@ class CyberAudioPlayer {
     if ('speechSynthesis' in window && this.speechUtterance) {
       window.speechSynthesis.pause();
     }
-    this.stopTelephoneStatic();
     if (this.intervalId) clearInterval(this.intervalId);
     this.isPlaying = false;
   }
@@ -202,7 +151,6 @@ class CyberAudioPlayer {
       this.isPlaying = true;
     } else if ('speechSynthesis' in window && this.speechUtterance) {
       window.speechSynthesis.resume();
-      this.startTelephoneStatic();
       this.isPlaying = true;
     }
   }
@@ -221,7 +169,6 @@ class CyberAudioPlayer {
       } catch (e) {}
       this.speechUtterance = null;
     }
-    this.stopTelephoneStatic();
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
@@ -230,10 +177,16 @@ class CyberAudioPlayer {
     this.currentTime = 0;
   }
 
+  seek(timeSec) {
+    this.currentTime = timeSec;
+    if (this.audioElement) {
+      this.audioElement.currentTime = timeSec;
+    }
+  }
+
   setVolume(vol) {
     this.volume = Math.max(0, Math.min(1, vol));
     if (this.audioElement) this.audioElement.volume = this.volume;
-    if (this.gainNode) this.gainNode.gain.value = 0.05 * this.volume;
   }
 }
 

@@ -11,15 +11,35 @@ import { analyzeAudioClientSide } from './services/clientSerEngine';
 import { saveCaseToDevice, getAllSavedCases, deleteSavedCase } from './services/caseDb';
 
 export default function App() {
-  const [calls, setCalls] = useState(FALLBACK_SCENARIOS);
-  const [activeCall, setActiveCall] = useState(FALLBACK_SCENARIOS[0]);
+  // Theme state: dark / light
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('vecna_theme') || 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('vecna_theme', theme);
+  }, [theme]);
+
+  // Demo mode state
   const [isMockMode, setIsMockMode] = useState(() => {
     return new URLSearchParams(window.location.search).get('mock') === 'true';
   });
 
+  // Session calls (uploads / recordings created by user in this session)
+  const [sessionCalls, setSessionCalls] = useState([]);
+  const [savedCases, setSavedCases] = useState([]);
+
+  // Active call
+  const [activeCall, setActiveCall] = useState(() => {
+    return isMockMode ? FALLBACK_SCENARIOS[0] : null;
+  });
+
+  // Modal states
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHardwareWizardOpen, setIsHardwareWizardOpen] = useState(false);
 
+  // Settings & Tier
   const [provider, setProvider] = useState(() => {
     return localStorage.getItem('vecna_provider') || 'offline';
   });
@@ -30,21 +50,44 @@ export default function App() {
     return localStorage.getItem('vecna_model_tier') || 'MID_RANGE';
   });
 
+  // Hardware telemetry & Storage
   const [hardwareInfo, setHardwareInfo] = useState(null);
   const [storageInfo, setStorageInfo] = useState(null);
 
+  // Status & loading
   const [backendConnected, setBackendConnected] = useState(false);
   const [isLoadingQueue, setIsLoadingQueue] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSurgeActive, setIsSurgeActive] = useState(false);
 
+  // Copilot & Cases
   const [copilotData, setCopilotData] = useState(null);
   const [isProcessingCopilot, setIsProcessingCopilot] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const [savedCases, setSavedCases] = useState([]);
   const [isCurrentCaseSaved, setIsCurrentCaseSaved] = useState(false);
 
   const wsRef = useRef(null);
+
+  // Compute displayed calls: in mock mode show demo scenarios, else show real session calls
+  const displayedCalls = isMockMode
+    ? FALLBACK_SCENARIOS
+    : sessionCalls;
+
+  // When demo mode toggles, update active call appropriately
+  const handleToggleMockMode = (newVal) => {
+    setIsMockMode(newVal);
+    if (newVal) {
+      setActiveCall(FALLBACK_SCENARIOS[0]);
+    } else {
+      if (sessionCalls.length > 0) {
+        setActiveCall(sessionCalls[0]);
+      } else if (savedCases.length > 0) {
+        setActiveCall(savedCases[0]);
+      } else {
+        setActiveCall(null);
+      }
+    }
+  };
 
   useEffect(() => {
     const initHardware = async () => {
@@ -76,6 +119,10 @@ export default function App() {
   const loadSavedCases = async () => {
     const list = await getAllSavedCases();
     setSavedCases(list);
+    // If not mock mode and no session calls, pick first saved case as active if available
+    if (!isMockMode && sessionCalls.length === 0 && list.length > 0 && !activeCall) {
+      setActiveCall(list[0]);
+    }
   };
 
   useEffect(() => {
@@ -84,9 +131,6 @@ export default function App() {
         const res = await fetch('/api/health');
         if (res.ok) {
           setBackendConnected(true);
-          if (!isMockMode) {
-            fetchScenarios();
-          }
         } else {
           setBackendConnected(false);
         }
@@ -96,8 +140,9 @@ export default function App() {
     };
 
     checkBackend();
-  }, [isMockMode]);
+  }, []);
 
+  // Connect WebSocket for live streaming & surges
   useEffect(() => {
     if (isMockMode) return;
 
@@ -115,7 +160,7 @@ export default function App() {
           const payload = JSON.parse(event.data);
 
           if (payload.action === 'surge_batch' && Array.isArray(payload.calls)) {
-            setCalls(payload.calls);
+            setSessionCalls(payload.calls);
             setActiveCall(payload.calls[0]);
             setIsSurgeActive(true);
             setTimeout(() => setIsSurgeActive(false), 8000);
@@ -124,7 +169,7 @@ export default function App() {
 
           if (payload.call_id) {
             setActiveCall(payload);
-            setCalls((prev) => {
+            setSessionCalls((prev) => {
               const exists = prev.some((c) => c.call_id === payload.call_id);
               let updated;
               if (exists) {
@@ -135,9 +180,7 @@ export default function App() {
               return updated.sort((a, b) => b.urgency_score - a.urgency_score);
             });
           }
-        } catch (e) {
-          console.error('Error parsing live WS payload', e);
-        }
+        } catch (e) {}
       };
     } catch (e) {}
 
@@ -148,25 +191,6 @@ export default function App() {
     };
   }, [isMockMode]);
 
-  const fetchScenarios = async () => {
-    setIsLoadingQueue(true);
-    try {
-      const res = await fetch('/api/mock-scenarios');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setCalls(data);
-          setActiveCall(data[0]);
-        }
-      }
-    } catch (err) {
-      setCalls(FALLBACK_SCENARIOS);
-      setActiveCall(FALLBACK_SCENARIOS[0]);
-    } finally {
-      setIsLoadingQueue(false);
-    }
-  };
-
   const handleSelectCall = (call) => {
     setActiveCall(call);
     setCopilotData(null);
@@ -175,14 +199,13 @@ export default function App() {
   };
 
   const handleRefreshQueue = () => {
-    if (isMockMode) {
-      setCalls([...FALLBACK_SCENARIOS]);
-      setActiveCall(FALLBACK_SCENARIOS[0]);
-    } else {
-      fetchScenarios();
-    }
+    setIsLoadingQueue(true);
+    setTimeout(() => {
+      setIsLoadingQueue(false);
+    }, 400);
   };
 
+  // Audio Analysis: Supports Hybrid Backend or Client-Side Pure Web Audio DSP
   const handleAnalyzeAudioFile = async (file, transcriptHint) => {
     setIsAnalyzing(true);
 
@@ -191,31 +214,12 @@ export default function App() {
         const arrayBuffer = await file.arrayBuffer();
         const clientPayload = await analyzeAudioClientSide(arrayBuffer, 16000, transcriptHint);
         setActiveCall(clientPayload);
-        setCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
+        setSessionCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
       } catch (e) {
         console.error('Client DSP analysis failed:', e);
       } finally {
         setIsAnalyzing(false);
       }
-      return;
-    }
-
-    if (isMockMode) {
-      setTimeout(() => {
-        const simulated = {
-          ...FALLBACK_SCENARIOS[0],
-          call_id: `CALL-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-          timestamp_ms: Date.now(),
-          caller_tag: file.name.includes('panic')
-            ? 'Distressed Caller / Digital Arrest'
-            : file.name.includes('nervous')
-            ? 'Caller with vocal hesitation'
-            : 'Incoming audio inquiry',
-        };
-        setActiveCall(simulated);
-        setCalls((prev) => [simulated, ...prev]);
-        setIsAnalyzing(false);
-      }, 900);
       return;
     }
 
@@ -240,7 +244,7 @@ export default function App() {
 
       const payload = await res.json();
       setActiveCall(payload);
-      setCalls((prev) => {
+      setSessionCalls((prev) => {
         const filtered = prev.filter((c) => c.call_id !== payload.call_id);
         const updated = [payload, ...filtered];
         return updated.sort((a, b) => b.urgency_score - a.urgency_score);
@@ -250,9 +254,9 @@ export default function App() {
         const arrayBuffer = await file.arrayBuffer();
         const clientPayload = await analyzeAudioClientSide(arrayBuffer, 16000, transcriptHint);
         setActiveCall(clientPayload);
-        setCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
+        setSessionCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
       } catch (inner) {
-        setActiveCall(FALLBACK_SCENARIOS[0]);
+        alert('Could not analyze audio.');
       }
     } finally {
       setIsAnalyzing(false);
@@ -277,7 +281,7 @@ export default function App() {
     };
 
     setActiveCall(simulated);
-    setCalls((prev) => {
+    setSessionCalls((prev) => {
       const updated = [simulated, ...prev.filter((c) => c.call_id !== simulated.call_id)];
       return updated.sort((a, b) => b.urgency_score - a.urgency_score);
     });
@@ -324,7 +328,7 @@ export default function App() {
       },
     ];
 
-    setCalls(surged);
+    setSessionCalls(surged);
     setActiveCall(surged[0]);
   };
 
@@ -335,6 +339,7 @@ export default function App() {
   };
 
   const handleProcessVoiceCopilot = async (officerNote) => {
+    if (!activeCall) return;
     setIsProcessingCopilot(true);
 
     if (isMockMode || !backendConnected) {
@@ -343,7 +348,7 @@ export default function App() {
         const mockDraft = {
           ticket_id: ticketId,
           call_id: activeCall.call_id,
-          incident_category: activeCall.triage_insights?.crime_category || 'Cyber Financial Incident',
+          incident_category: activeCall.triage_insights?.crime_category || 'Financial Cyber Incident',
           amount_involved: '₹45,000',
           payment_channel: 'PhonePe (UPI)',
           priority: 'IMMEDIATE_FREEZE',
@@ -366,7 +371,7 @@ export default function App() {
         };
         setCopilotData(updated);
         setIsProcessingCopilot(false);
-      }, 600);
+      }, 500);
       return;
     }
 
@@ -396,6 +401,7 @@ export default function App() {
   };
 
   const handleExportReport = async () => {
+    if (!activeCall) return;
     setIsExporting(true);
 
     try {
@@ -449,6 +455,7 @@ export default function App() {
   };
 
   const handleSaveCaseLocally = async (casePayload) => {
+    if (!casePayload) return;
     try {
       await saveCaseToDevice(casePayload);
       setIsCurrentCaseSaved(true);
@@ -460,32 +467,34 @@ export default function App() {
 
   const handleDeleteSavedCase = async (callId) => {
     await deleteSavedCase(callId);
-    if (activeCall.call_id === callId) {
+    if (activeCall?.call_id === callId) {
       setIsCurrentCaseSaved(false);
     }
     await loadSavedCases();
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#070a10] text-slate-100 font-sans selection:bg-cyan-500 selection:text-black">
+    <div className="min-h-screen flex flex-col bg-slate-100/60 dark:bg-[#070a10] text-slate-900 dark:text-slate-100 font-sans selection:bg-cyan-500 selection:text-black transition-colors duration-200">
       {/* Top Header */}
       <Header
         isMockMode={isMockMode}
-        setIsMockMode={setIsMockMode}
+        setIsMockMode={handleToggleMockMode}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenHardwareWizard={() => setIsHardwareWizardOpen(true)}
         provider={provider}
         backendConnected={backendConnected}
         currentTier={currentTier}
         storageInfo={storageInfo}
+        theme={theme}
+        setTheme={setTheme}
       />
 
-      {/* Main 3-Column Dashboard Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
+      {/* Main 3-Column Dashboard Body: Flex-1, flexible layout at any zoom level */}
+      <main className="flex-1 max-w-[1680px] w-full mx-auto p-2.5 sm:p-3.5 grid grid-cols-1 lg:grid-cols-12 gap-3 lg:h-[calc(100vh-68px)] lg:max-h-[1100px] overflow-hidden items-stretch">
         {/* Left Column: Priority Call Queue */}
-        <div className="lg:col-span-3 h-[460px] lg:h-auto min-h-[420px]">
+        <div className="lg:col-span-3 h-full min-h-[380px] lg:min-h-0 flex flex-col">
           <CallQueue
-            calls={calls}
+            calls={displayedCalls}
             selectedCallId={activeCall?.call_id}
             onSelectCall={handleSelectCall}
             onRefreshQueue={handleRefreshQueue}
@@ -494,11 +503,12 @@ export default function App() {
             isSurgeActive={isSurgeActive}
             savedCases={savedCases}
             onDeleteSavedCase={handleDeleteSavedCase}
+            isMockMode={isMockMode}
           />
         </div>
 
         {/* Center Column: Voice Forensics & Telemetry */}
-        <div className="lg:col-span-5 h-[620px] lg:h-auto min-h-[500px]">
+        <div className="lg:col-span-5 h-full min-h-[480px] lg:min-h-0 flex flex-col">
           <ForensicsPanel
             activeCall={activeCall}
             onAnalyzeAudioFile={handleAnalyzeAudioFile}
@@ -509,7 +519,7 @@ export default function App() {
         </div>
 
         {/* Right Column: Decision Support & Incident Log */}
-        <div className="lg:col-span-4 h-[560px] lg:h-auto min-h-[460px]">
+        <div className="lg:col-span-4 h-full min-h-[440px] lg:min-h-0 flex flex-col">
           <DecisionSupport
             activeCall={activeCall}
             onProcessVoiceCopilot={handleProcessVoiceCopilot}

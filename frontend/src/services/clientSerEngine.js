@@ -302,8 +302,8 @@ export async function analyzeAudioClientSide(audioData, sampleRate = 16000, tran
     confidence_score: 0.92,
   };
 
-  // Determine transcript
-  const rawText = transcriptHint || 'Sir please help! I was contacted via video call claiming digital arrest for ₹50,000 from account 98213812!';
+  // Determine transcript without fabricating fake scam narratives
+  const rawText = transcriptHint || `Voice audio processed (${pitch} Hz, ${jitter}% tremor). Acoustic telemetry logged.`;
   const { text: redactedText, count: piiCount } = clientRedactPii(rawText);
   const keywords = clientDetectThreats(rawText);
   const fusion = clientFuseBiomarkers(biomarkers, keywords);
