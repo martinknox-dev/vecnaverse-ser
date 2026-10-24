@@ -8,6 +8,7 @@ import DecisionSupport from './components/DecisionSupport';
 import { FALLBACK_SCENARIOS, INDICATIVE_DISCLAIMER } from './mockData';
 import { detectBrowserHardware, fetchBackendHardware } from './services/hardwareEngine';
 import { analyzeAudioClientSide } from './services/clientSerEngine';
+import { runLocalSpeechTriage } from './services/localModelEngine';
 import { saveCaseToDevice, getAllSavedCases, deleteSavedCase } from './services/caseDb';
 import { cyberAudioPlayer } from './services/audioSynthesizer';
 import { callSiliconFlowSTT, callGroqWhisperSTT } from './services/cloudServices';
@@ -263,10 +264,10 @@ export default function App() {
       } catch (err) {}
     }
 
-    // Client-side fallback if backend is offline or on static hosting
+    // Client-side on-device models pipeline if backend is offline or on static hosting
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const clientPayload = await analyzeAudioClientSide(arrayBuffer, 16000, activeHint);
+      const clientPayload = await runLocalSpeechTriage(arrayBuffer, 16000, activeHint);
       setActiveCall(clientPayload);
       setSessionCalls((prev) => [clientPayload, ...prev.filter((c) => c.call_id !== clientPayload.call_id)]);
     } catch (e) {
