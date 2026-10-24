@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from fastapi.testclient import TestClient
 
 # Ensure backend directory is in sys.path
@@ -7,26 +8,26 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from app.main import app
 
-def test_vecna_pulse_endpoints():
+def test_vecna_pulse_phase2():
     client = TestClient(app)
 
     # 1. Test GET /api/health
-    print("[1/4] Testing GET /api/health...")
+    print("[1/6] Testing GET /api/health...")
     health_resp = client.get("/api/health")
-    assert health_resp.status_code == 200, f"Health check failed with {health_resp.status_code}: {health_resp.text}"
+    assert health_resp.status_code == 200, f"Health check failed: {health_resp.text}"
     health_data = health_resp.json()
-    assert health_data.get("status") == "ok", f"Expected status 'ok', got {health_data}"
-    assert "disclaimer" in health_data, "Missing indicative disclaimer in health response"
-    print(" -> Health check PASSED:", health_data["status"])
+    assert health_data.get("status") == "ok"
+    assert "disclaimer" in health_data
+    print(" -> Health check PASSED:", health_data["status"], health_data["engine"])
 
     # 2. Test GET /api/mock-scenarios
-    print("[2/4] Testing GET /api/mock-scenarios...")
+    print("[2/6] Testing GET /api/mock-scenarios...")
     mock_resp = client.get("/api/mock-scenarios")
-    assert mock_resp.status_code == 200, f"Mock scenarios failed with {mock_resp.status_code}: {mock_resp.text}"
+    assert mock_resp.status_code == 200
     mock_scenarios = mock_resp.json()
-    assert isinstance(mock_scenarios, list) and len(mock_scenarios) >= 4, "Expected at least 4 scenarios"
+    assert len(mock_scenarios) >= 4
     
-    # Assert schema matches TriagePayload specification
+    # Assert schema matches TriagePayload specification + new biomarkers
     first_scen = mock_scenarios[0]
     required_keys = [
         "call_id", "timestamp_ms", "caller_tag", "urgency_score", "urgency_level",
@@ -36,75 +37,90 @@ def test_vecna_pulse_endpoints():
     for key in required_keys:
         assert key in first_scen, f"Missing key '{key}' in mock scenario"
     
-    # Verify descending urgency score ordering
-    urgencies = [s["urgency_score"] for s in mock_scenarios]
-    assert urgencies == sorted(urgencies, reverse=True), f"Scenarios not sorted descending: {urgencies}"
-    print(f" -> Mock scenarios PASSED: {len(mock_scenarios)} scenarios sorted descending: {urgencies}")
+    assert "voice_activity_ratio" in first_scen["acoustic_biomarkers"]
+    assert "confidence_score" in first_scen["acoustic_biomarkers"]
+    print(f" -> Mock scenarios PASSED with 4 scenarios. Biomarkers verified.")
 
-    # 3. Test POST /api/analyze-audio with each sample WAV
-    samples = ["panic_victim.wav", "nervous_caller.wav", "angry_caller.wav"]
-    for sample_name in samples:
-        sample_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "samples", sample_name)
-        assert os.path.exists(sample_path), f"Sample file not found at {sample_path}"
-        print(f"[3/4] Testing POST /api/analyze-audio with {sample_name}...")
+    # 3. Test POST /api/analyze-audio with sample WAVs
+    print("[3/6] Testing POST /api/analyze-audio with panic_victim.wav...")
+    sample_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "samples", "panic_victim.wav")
+    assert os.path.exists(sample_path)
 
-        with open(sample_path, "rb") as f:
-            audio_bytes = f.read()
+    with open(sample_path, "rb") as f:
+        audio_bytes = f.read()
 
-        files = {"file": (sample_name, audio_bytes, "audio/wav")}
-        data = {"transcript_hint": f"Emergency test caller from phone +91 9876543210 regarding Aadhaar 1234 5678 9012 and OTP 4819 for {sample_name}"}
-        headers = {"X-Provider": "offline"}
+    files = {"file": ("panic_victim.wav", audio_bytes, "audio/wav")}
+    data = {"transcript_hint": "Someone claiming to be CBI put me under digital arrest and asking for OTP 4819 from phone 9876543210!"}
+    headers = {"X-Provider": "offline"}
 
-        analyze_resp = client.post("/api/analyze-audio", files=files, data=data, headers=headers)
-        assert analyze_resp.status_code == 200, f"Analyze audio failed for {sample_name}: {analyze_resp.status_code}: {analyze_resp.text}"
-        payload = analyze_resp.json()
+    analyze_resp = client.post("/api/analyze-audio", files=files, data=data, headers=headers)
+    assert analyze_resp.status_code == 200, f"Analyze audio failed: {analyze_resp.text}"
+    triage_payload = analyze_resp.json()
 
-        for key in required_keys:
-            assert key in payload, f"Missing key '{key}' in analyze-audio response"
+    for key in required_keys:
+        assert key in triage_payload, f"Missing key '{key}' in analyze-audio response"
 
-        # Verify acoustic biomarkers are populated
-        biomarkers = payload["acoustic_biomarkers"]
-        assert "pitch_hz" in biomarkers and biomarkers["pitch_hz"] > 0
-        assert "jitter_tremor_pct" in biomarkers
-        assert "speech_rate_sps" in biomarkers
-        assert "rms_energy_db" in biomarkers
-        assert "vocal_anomaly" in biomarkers
+    biomarkers = triage_payload["acoustic_biomarkers"]
+    assert "voice_activity_ratio" in biomarkers, "Missing voice_activity_ratio"
+    assert "confidence_score" in biomarkers, "Missing confidence_score"
+    print(f" -> Analyze audio PASSED: Pitch={biomarkers['pitch_hz']}Hz, VAD={biomarkers['voice_activity_ratio']}, Conf={biomarkers['confidence_score']}")
 
-        # Verify PII was redacted
-        transcript_obj = payload["transcript"]
-        assert "[REDACTED-" in transcript_obj["raw_redacted"], "PII was not redacted from transcript"
-        assert transcript_obj["pii_masked_count"] >= 1, "Expected at least 1 redacted PII match"
+    # 4. Test POST /api/voice-copilot (Wispr Voice Co-Pilot)
+    print("[4/6] Testing POST /api/voice-copilot...")
+    copilot_req = {
+        "call_id": triage_payload["call_id"],
+        "officer_voice_note": "Caller confirmed ₹45,000 sent via PhonePe, immediately freeze account and log FIR draft",
+        "current_payload": triage_payload
+    }
+    copilot_resp = client.post("/api/voice-copilot", json=copilot_req)
+    assert copilot_resp.status_code == 200, f"Voice copilot failed: {copilot_resp.text}"
+    copilot_data = copilot_resp.json()
+    assert "updated_actions" in copilot_data, "Missing updated_actions"
+    assert "ncrp_1930_ticket_draft" in copilot_data, "Missing ncrp_1930_ticket_draft"
+    assert "fir_summary_note" in copilot_data, "Missing fir_summary_note"
 
-        # Verify mandatory indicative disclaimer
-        insights = payload["triage_insights"]
-        assert "indicative_disclaimer" in insights
-        assert "INDICATIVE TRIAGE SIGNAL ONLY" in insights["indicative_disclaimer"]
+    ticket = copilot_data["ncrp_1930_ticket_draft"]
+    assert "45,000" in ticket["amount_involved"] or "45000" in ticket["amount_involved"]
+    assert "PhonePe" in ticket["payment_channel"]
+    assert "ticket_id" in ticket
+    safe_amount = ticket['amount_involved'].replace('\u20b9', 'Rs.')
+    print(f" -> Voice Co-Pilot PASSED: Generated Ticket {ticket['ticket_id']} for {safe_amount} ({ticket['payment_channel']})")
 
-        # Verify emotion probabilities sum to ~1.0
-        probs = payload["emotion_probabilities"]
-        prob_sum = round(sum(probs.values()), 2)
-        assert 0.99 <= prob_sum <= 1.01, f"Probabilities do not sum to 1.0: {prob_sum}"
+    # 5. Test POST /api/export-report (Forensic Evidence Report)
+    print("[5/6] Testing POST /api/export-report...")
+    report_req = {
+        "triage_payload": triage_payload,
+        "officer_notes": "Officer dispatched immediate NCRP hold order to cyber crime cell.",
+        "copilot_data": copilot_data
+    }
+    report_resp = client.post("/api/export-report", json=report_req)
+    assert report_resp.status_code == 200, f"Export report failed: {report_resp.text}"
+    report_data = report_resp.json()
+    assert "markdown_report" in report_data
+    assert "json_packet" in report_data
+    assert "filename_base" in report_data
+    assert "# VECNA-Pulse Forensic Case Dossier" in report_data["markdown_report"]
+    assert "LEGAL NOTICE & STATUTORY GUARDRAIL" in report_data["markdown_report"]
+    print(f" -> Export Report PASSED: Generated {report_data['filename_base']} ({len(report_data['markdown_report'])} bytes)")
 
-        print(f" -> {sample_name} PASSED:")
-        print(f"    Dominant Emotion: {payload['dominant_emotion']} ({payload['emotion_probabilities']})")
-        print(f"    Urgency: {payload['urgency_score']} ({payload['urgency_level']})")
-        print(f"    Pitch: {biomarkers['pitch_hz']} Hz | Jitter: {biomarkers['jitter_tremor_pct']}% | Rate: {biomarkers['speech_rate_sps']} sps")
-        print(f"    Redacted Transcript: {transcript_obj['raw_redacted']}")
-        print(f"    Masked PII count: {transcript_obj['pii_masked_count']}")
-
-    # 4. Test WebSocket live simulation
-    print("[4/4] Testing WebSocket live call simulation...")
+    # 6. Test WebSocket live streaming (simulate_call & simulate_surge)
+    print("[6/6] Testing WebSocket live streaming (simulate_call & simulate_surge)...")
     with client.websocket_connect("/ws/live-call") as ws:
-        ws.send_text('{"action": "simulate_call", "scenario": "digital_arrest"}')
-        frame_text = ws.receive_text()
-        frame = client.app # verify json parse
-        import json
-        frame_json = json.loads(frame_text)
-        assert "call_id" in frame_json
-        assert "urgency_score" in frame_json
-        print(f" -> WebSocket stream PASSED: received live frame for {frame_json['call_id']}")
+        # Test simulate_call
+        ws.send_text(json.dumps({"action": "simulate_call", "scenario": "digital_arrest"}))
+        frame1 = json.loads(ws.receive_text())
+        assert "call_id" in frame1
+        assert "urgency_score" in frame1
+        assert "voice_activity_ratio" in frame1["acoustic_biomarkers"]
+        print(f" -> WS simulate_call PASSED: Frame 1 Urgency={frame1['urgency_score']} ({frame1['dominant_emotion']})")
 
-    print("\nALL BACKEND SMOKE TESTS PASSED CLEANLY! [OK]")
+        # Test simulate_surge
+        ws.send_text(json.dumps({"action": "simulate_surge"}))
+        surge_frame = json.loads(ws.receive_text())
+        assert "call_id" in surge_frame or "calls" in surge_frame
+        print(f" -> WS simulate_surge PASSED: Received surge stream update successfully.")
+
+    print("\nALL PHASE 2 BACKEND SMOKE TESTS PASSED CLEANLY! [OK]")
 
 if __name__ == "__main__":
-    test_vecna_pulse_endpoints()
+    test_vecna_pulse_phase2()

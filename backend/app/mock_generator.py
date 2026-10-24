@@ -26,6 +26,8 @@ SCENARIOS: List[Dict[str, Any]] = [
             "speech_rate_sps": 6.4,
             "rms_energy_db": -10.8,
             "vocal_anomaly": "High micro-tremor + acute vocal tension detected",
+            "voice_activity_ratio": 0.88,
+            "confidence_score": 0.94,
         },
         "transcript": {
             "raw_redacted": "Sir please help! Someone on video call said they are from CBI Mumbai and I am under digital arrest for a FedEx parcel containing narcotics! They made me transfer ₹1,50,000 from account ending [REDACTED-ACCT] and now demanding OTP [REDACTED-OTP] from my phone [REDACTED-PHONE] right now!",
@@ -70,6 +72,8 @@ SCENARIOS: List[Dict[str, Any]] = [
             "speech_rate_sps": 3.4,
             "rms_energy_db": -18.2,
             "vocal_anomaly": "Elevated pitch instability / vocal tremor detected",
+            "voice_activity_ratio": 0.82,
+            "confidence_score": 0.91,
         },
         "transcript": {
             "raw_redacted": "I received an unknown video call on WhatsApp. They recorded my webcam and created a morphed naked video. Now they are blackmailing me and threatening to leak video to my family if I don't pay ₹80,000 extortion money. I am terrified, I don't know what to do, I might kill myself...",
@@ -113,6 +117,8 @@ SCENARIOS: List[Dict[str, Any]] = [
             "speech_rate_sps": 5.8,
             "rms_energy_db": -13.5,
             "vocal_anomaly": "Rapid speech rate with breath shortness detected",
+            "voice_activity_ratio": 0.86,
+            "confidence_score": 0.89,
         },
         "transcript": {
             "raw_redacted": "I got an SMS saying electricity bill unpaid. Caller asked me to install AnyDesk QuickSupport APK. As soon as I installed it, ₹45,000 money deducted from my SBI account ending [REDACTED-ACCT] via UPI! Can you freeze the transaction right now?",
@@ -156,6 +162,8 @@ SCENARIOS: List[Dict[str, Any]] = [
             "speech_rate_sps": 4.1,
             "rms_energy_db": -22.1,
             "vocal_anomaly": "Depressed pitch contour with hesitation pauses",
+            "voice_activity_ratio": 0.65,
+            "confidence_score": 0.82,
         },
         "transcript": {
             "raw_redacted": "I want to report anonymously. My roommate opened 4 bank accounts at local private branches and is renting them out as mule account handlers for telegram job task scams. The primary phone number he uses for coordinator calls is [REDACTED-PHONE].",

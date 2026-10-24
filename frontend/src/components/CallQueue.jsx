@@ -1,12 +1,14 @@
 import React from 'react';
-import { Phone, AlertCircle, Clock, Volume2, ShieldAlert } from 'lucide-react';
+import { Phone, AlertCircle, Clock, Volume2, ShieldAlert, Zap, Flame, Radio } from 'lucide-react';
 
 export default function CallQueue({
   calls,
   selectedCallId,
   onSelectCall,
   onRefreshQueue,
-  isLoading
+  onSimulateSurge,
+  isLoading,
+  isSurgeActive
 }) {
   const getUrgencyBadge = (level, score) => {
     switch (level) {
@@ -38,9 +40,28 @@ export default function CallQueue({
             Priority Call Queue
           </h2>
         </div>
-        <span className="text-[11px] font-mono text-cyan-400 font-bold bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/60">
-          {calls.length} ACTIVE
-        </span>
+        <div className="flex items-center gap-1.5">
+          {isSurgeActive && (
+            <span className="text-[10px] font-mono text-rose-300 bg-rose-950/80 border border-rose-700/80 px-1.5 py-0.5 rounded animate-pulse">
+              SURGE
+            </span>
+          )}
+          <span className="text-[11px] font-mono text-cyan-400 font-bold bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/60">
+            {calls.length} ACTIVE
+          </span>
+        </div>
+      </div>
+
+      {/* Multi-Call Surge Trigger Banner */}
+      <div className="p-2.5 bg-gradient-to-r from-red-950/40 via-amber-950/20 to-cyber-dark border-b border-cyber-border/70">
+        <button
+          onClick={onSimulateSurge}
+          className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white shadow-md shadow-rose-600/20 transition-all active:scale-[0.98]"
+          title="Simulate 4 concurrent cybercrime emergency calls with dynamic urgency re-ranking"
+        >
+          <Flame className="w-3.5 h-3.5 fill-current animate-bounce" />
+          <span>Simulate Multi-Call Surge</span>
+        </button>
       </div>
 
       {/* Call List */}
@@ -58,7 +79,7 @@ export default function CallQueue({
                 onClick={() => onSelectCall(call)}
                 className={`p-3 rounded-lg cursor-pointer transition-all border ${
                   isSelected
-                    ? 'bg-cyber-card border-cyan-500/80 shadow-md shadow-cyan-500/10'
+                    ? 'bg-cyber-card border-cyan-500/80 shadow-md shadow-cyan-500/10 ring-1 ring-cyan-500/30'
                     : 'bg-cyber-dark/40 border-cyber-border hover:border-slate-600 hover:bg-cyber-dark/80'
                 }`}
               >
@@ -69,7 +90,7 @@ export default function CallQueue({
                     {call.call_id}
                   </span>
                   <span
-                    className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded border ${getUrgencyBadge(
+                    className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded border transition-all ${getUrgencyBadge(
                       call.urgency_level,
                       call.urgency_score
                     )}`}
@@ -98,7 +119,7 @@ export default function CallQueue({
                   {/* Urgency Progress Bar */}
                   <div className="w-full bg-slate-800/80 rounded-full h-1.5 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 shadow-sm ${getUrgencyBarColor(
+                      className={`h-full rounded-full transition-all duration-700 shadow-sm ${getUrgencyBarColor(
                         call.urgency_score
                       )}`}
                       style={{ width: `${call.urgency_score}%` }}

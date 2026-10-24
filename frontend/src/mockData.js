@@ -22,6 +22,8 @@ export const FALLBACK_SCENARIOS = [
       speech_rate_sps: 6.4,
       rms_energy_db: -10.8,
       vocal_anomaly: "High micro-tremor + acute vocal tension detected",
+      voice_activity_ratio: 0.88,
+      confidence_score: 0.94,
     },
     transcript: {
       raw_redacted:
@@ -68,6 +70,8 @@ export const FALLBACK_SCENARIOS = [
       speech_rate_sps: 3.4,
       rms_energy_db: -18.2,
       vocal_anomaly: "Elevated pitch instability / vocal tremor detected",
+      voice_activity_ratio: 0.82,
+      confidence_score: 0.91,
     },
     transcript: {
       raw_redacted:
@@ -113,6 +117,8 @@ export const FALLBACK_SCENARIOS = [
       speech_rate_sps: 5.8,
       rms_energy_db: -13.5,
       vocal_anomaly: "Rapid speech rate with breath shortness detected",
+      voice_activity_ratio: 0.86,
+      confidence_score: 0.89,
     },
     transcript: {
       raw_redacted:
@@ -158,6 +164,8 @@ export const FALLBACK_SCENARIOS = [
       speech_rate_sps: 4.1,
       rms_energy_db: -22.1,
       vocal_anomaly: "Depressed pitch contour with hesitation pauses",
+      voice_activity_ratio: 0.65,
+      confidence_score: 0.82,
     },
     transcript: {
       raw_redacted:

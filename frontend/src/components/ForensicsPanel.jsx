@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Upload,
   Mic,
@@ -11,7 +11,9 @@ import {
   Sparkles,
   CheckCircle2,
   Radio,
-  FileAudio
+  FileAudio,
+  Zap,
+  Gauge
 } from 'lucide-react';
 
 export default function ForensicsPanel({
@@ -25,8 +27,14 @@ export default function ForensicsPanel({
   const [isRecording, setIsRecording] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
   const [transcriptHint, setTranscriptHint] = useState('');
+  const [micVolume, setMicVolume] = useState(0);
+
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const micStreamRef = useRef(null);
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -40,16 +48,62 @@ export default function ForensicsPanel({
     onAnalyzeAudioFile(uploadFile, transcriptHint);
   };
 
-  // Live Mic Stream
+  // Clean up audio context and animation on unmount
+  useEffect(() => {
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {});
+      }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
+
+  // Live Mic Stream with Web Audio API level metering
   const toggleRecording = async () => {
     if (isRecording) {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       }
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {});
+      }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
       setIsRecording(false);
+      setMicVolume(0);
     } else {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = stream;
+
+        // Set up Web Audio API Analyser for live VU meter
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        audioContextRef.current = audioCtx;
+        const source = audioCtx.createMediaStreamSource(stream);
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        const updateMeter = () => {
+          if (!analyserRef.current) return;
+          analyserRef.current.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+          }
+          const avg = sum / dataArray.length;
+          setMicVolume(Math.min(100, Math.round((avg / 128) * 100)));
+          animFrameRef.current = requestAnimationFrame(updateMeter);
+        };
+        updateMeter();
+
         const mediaRecorder = new MediaRecorder(stream);
         mediaRecorderRef.current = mediaRecorder;
         audioChunksRef.current = [];
@@ -67,10 +121,9 @@ export default function ForensicsPanel({
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
           const file = new File([audioBlob], 'live_mic_recording.wav', { type: 'audio/wav' });
           onAnalyzeAudioFile(file, 'Live caller microphone transmission captured.');
-          stream.getTracks().forEach((track) => track.stop());
         };
 
-        // Slice every 2 seconds for real-time live SER chunks
+        // Slice every 2 seconds for sliding-window SER
         mediaRecorder.start(2000);
         setIsRecording(true);
       } catch (err) {
@@ -79,7 +132,6 @@ export default function ForensicsPanel({
     }
   };
 
-  // Helper colors for emotions
   const getEmotionColor = (emotion) => {
     switch (emotion) {
       case 'fear':
@@ -130,6 +182,8 @@ export default function ForensicsPanel({
     speech_rate_sps: 4.2,
     rms_energy_db: -20.0,
     vocal_anomaly: 'Awaiting signal feed...',
+    voice_activity_ratio: 0.85,
+    confidence_score: 0.90,
   };
 
   const transcript = activeCall?.transcript || {
@@ -140,11 +194,8 @@ export default function ForensicsPanel({
 
   const timeline = activeCall?.timeline_segments || [];
 
-  // Formatter for transcript highlighting PII tags & keywords
   const renderHighlightedTranscript = (rawText, keywords = []) => {
     if (!rawText) return null;
-
-    // Pattern to match [REDACTED-*] tags
     const piiRegex = /(\[REDACTED-[A-Za-z]+\])/g;
     const parts = rawText.split(piiRegex);
 
@@ -160,10 +211,8 @@ export default function ForensicsPanel({
         );
       }
 
-      // Highlight keywords within non-PII text
       if (keywords.length === 0) return <span key={idx}>{part}</span>;
 
-      // Simple keyword highlighter
       const escapedKws = keywords.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
       const kwRegex = new RegExp(`(${escapedKws.join('|')})`, 'gi');
       const kwParts = part.split(kwRegex);
@@ -297,35 +346,68 @@ export default function ForensicsPanel({
           </form>
         )}
 
+        {/* Live Mic Mode with Reactive VU Meter Bar */}
         {activeTab === 'mic' && (
-          <div className="bg-cyber-dark/60 border border-cyber-border rounded-lg p-3.5 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-3 h-3 rounded-full ${
-                  isRecording ? 'bg-red-500 animate-ping' : 'bg-slate-600'
-                }`}
-              ></div>
-              <div>
-                <p className="text-xs font-bold text-white">
-                  {isRecording ? 'Live Mic Stream Active' : 'Microphone Stream Standby'}
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  Streams real-time 2.0s PCM audio chunks to WebSocket engine
-                </p>
+          <div className="bg-cyber-dark/60 border border-cyber-border rounded-lg p-3.5 space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-3 h-3 rounded-full ${
+                    isRecording ? 'bg-red-500 animate-ping' : 'bg-slate-600'
+                  }`}
+                ></div>
+                <div>
+                  <p className="text-xs font-bold text-white">
+                    {isRecording ? 'Live Mic Stream Active (Streaming 2.0s Chunks)' : 'Microphone Stream Standby'}
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Real-time speech emotion recognition & voice biomarker tracking
+                  </p>
+                </div>
               </div>
+
+              <button
+                onClick={toggleRecording}
+                className={`px-4 py-2 text-xs font-bold rounded-md flex items-center gap-2 transition-all ${
+                  isRecording
+                    ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse'
+                    : 'bg-cyan-500 hover:bg-cyan-400 text-black'
+                }`}
+              >
+                <Mic className="w-3.5 h-3.5" />
+                <span>{isRecording ? 'Stop Live Mic' : 'Start Live Mic Stream'}</span>
+              </button>
             </div>
 
-            <button
-              onClick={toggleRecording}
-              className={`px-4 py-2 text-xs font-bold rounded-md flex items-center gap-2 transition-all ${
-                isRecording
-                  ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse'
-                  : 'bg-cyan-500 hover:bg-cyan-400 text-black'
-              }`}
-            >
-              <Mic className="w-3.5 h-3.5" />
-              <span>{isRecording ? 'Stop Live Mic' : 'Start Live Mic Stream'}</span>
-            </button>
+            {/* Reactive Audio Volume VU Meter */}
+            <div className="space-y-1 bg-cyber-card/80 p-2.5 rounded border border-cyber-border/70">
+              <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                <span className="flex items-center gap-1">
+                  <AudioWaveform className="w-3 h-3 text-cyan-400" />
+                  Live Audio Input Level (Web Audio API)
+                </span>
+                <span className={micVolume > 60 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
+                  {isRecording ? `${micVolume}%` : 'MUTE'}
+                </span>
+              </div>
+              <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden flex gap-0.5 p-0.5 border border-cyber-border">
+                {[...Array(20)].map((_, i) => {
+                  const threshold = (i + 1) * 5;
+                  const isActive = isRecording && micVolume >= threshold;
+                  let color = 'bg-emerald-500';
+                  if (i >= 12) color = 'bg-amber-400';
+                  if (i >= 16) color = 'bg-rose-500';
+                  return (
+                    <div
+                      key={i}
+                      className={`flex-1 h-full rounded-sm transition-all duration-75 ${
+                        isActive ? color : 'bg-slate-800/40'
+                      }`}
+                    ></div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         )}
 
@@ -334,9 +416,9 @@ export default function ForensicsPanel({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-white flex items-center gap-1.5">
                 <Radio className="w-3.5 h-3.5 text-cyan-400" />
-                Trigger Live Simulated Cybercrime Call:
+                Trigger Live Call Escalation Simulation:
               </span>
-              <span className="text-[10px] text-slate-400 font-mono">Real-time WebSocket Push</span>
+              <span className="text-[10px] text-slate-400 font-mono">5 sequential 2-sec slices</span>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {[
@@ -412,53 +494,75 @@ export default function ForensicsPanel({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-              Extracted Acoustic Biomarkers (Real DSP)
+              Extracted Acoustic Biomarkers (Hybrid ONNX + DSP)
             </span>
-            <span className="text-[10px] font-mono text-cyan-400">librosa • yin • onsets</span>
+            <span className="text-[10px] font-mono text-cyan-400">SenseVoice • Silero VAD • YIN</span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             {/* Pitch (F0) */}
-            <div className="bg-cyber-card border border-cyber-border p-3 rounded-lg">
-              <div className="text-[11px] text-slate-400 font-medium">Pitch (F0)</div>
-              <div className="text-lg font-bold font-mono text-white mt-1">
-                {biomarkers.pitch_hz} <span className="text-xs text-slate-400 font-normal">Hz</span>
+            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-lg">
+              <div className="text-[10px] text-slate-400 font-medium">Pitch (F0)</div>
+              <div className="text-base font-bold font-mono text-white mt-0.5">
+                {biomarkers.pitch_hz} <span className="text-[10px] text-slate-400 font-normal">Hz</span>
               </div>
-              <div className="text-[10px] text-slate-400 mt-1">
+              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
                 {biomarkers.pitch_hz > 240 ? 'Acute elevation' : 'Baseline vocal zone'}
               </div>
             </div>
 
             {/* Jitter / Tremor */}
-            <div className="bg-cyber-card border border-cyber-border p-3 rounded-lg">
-              <div className="text-[11px] text-slate-400 font-medium">Vocal Jitter/Tremor</div>
-              <div className="text-lg font-bold font-mono text-amber-300 mt-1">
-                {biomarkers.jitter_tremor_pct} <span className="text-xs text-slate-400 font-normal">%</span>
+            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-lg">
+              <div className="text-[10px] text-slate-400 font-medium">Jitter/Tremor</div>
+              <div className="text-base font-bold font-mono text-amber-300 mt-0.5">
+                {biomarkers.jitter_tremor_pct} <span className="text-[10px] text-slate-400 font-normal">%</span>
               </div>
-              <div className="text-[10px] text-slate-400 mt-1">
-                {biomarkers.jitter_tremor_pct > 3.0 ? 'High vocal shaking' : 'Normal jitter'}
+              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
+                {biomarkers.jitter_tremor_pct > 3.0 ? 'High tremor' : 'Normal jitter'}
               </div>
             </div>
 
             {/* Speech Rate */}
-            <div className="bg-cyber-card border border-cyber-border p-3 rounded-lg">
-              <div className="text-[11px] text-slate-400 font-medium">Speech Rate</div>
-              <div className="text-lg font-bold font-mono text-cyan-300 mt-1">
-                {biomarkers.speech_rate_sps} <span className="text-xs text-slate-400 font-normal">sps</span>
+            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-lg">
+              <div className="text-[10px] text-slate-400 font-medium">Speech Rate</div>
+              <div className="text-base font-bold font-mono text-cyan-300 mt-0.5">
+                {biomarkers.speech_rate_sps} <span className="text-[10px] text-slate-400 font-normal">sps</span>
               </div>
-              <div className="text-[10px] text-slate-400 mt-1">
-                Syllables per second
+              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
+                Syllables / sec
               </div>
             </div>
 
             {/* RMS Energy */}
-            <div className="bg-cyber-card border border-cyber-border p-3 rounded-lg">
-              <div className="text-[11px] text-slate-400 font-medium">Loudness (RMS)</div>
-              <div className="text-lg font-bold font-mono text-slate-100 mt-1">
-                {biomarkers.rms_energy_db} <span className="text-xs text-slate-400 font-normal">dB</span>
+            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-lg">
+              <div className="text-[10px] text-slate-400 font-medium">Loudness (RMS)</div>
+              <div className="text-base font-bold font-mono text-slate-100 mt-0.5">
+                {biomarkers.rms_energy_db} <span className="text-[10px] text-slate-400 font-normal">dB</span>
               </div>
-              <div className="text-[10px] text-slate-400 mt-1">
-                Decibels full scale
+              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
+                Decibels FS
+              </div>
+            </div>
+
+            {/* Voice Activity Ratio (VAD) */}
+            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-lg">
+              <div className="text-[10px] text-slate-400 font-medium">VAD Speech</div>
+              <div className="text-base font-bold font-mono text-emerald-400 mt-0.5">
+                {Math.round((biomarkers.voice_activity_ratio ?? 0.85) * 100)} <span className="text-[10px] text-slate-400 font-normal">%</span>
+              </div>
+              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
+                Silero VAD Ratio
+              </div>
+            </div>
+
+            {/* Confidence Score */}
+            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-lg">
+              <div className="text-[10px] text-slate-400 font-medium">Confidence</div>
+              <div className="text-base font-bold font-mono text-purple-300 mt-0.5">
+                {Math.round((biomarkers.confidence_score ?? 0.90) * 100)} <span className="text-[10px] text-slate-400 font-normal">%</span>
+              </div>
+              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
+                Acoustic Quality
               </div>
             </div>
           </div>

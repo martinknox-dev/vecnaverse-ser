@@ -54,3 +54,9 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Models & Large Binary Weights
+backend/models/
+*.onnx
+*.tar.bz2
+
