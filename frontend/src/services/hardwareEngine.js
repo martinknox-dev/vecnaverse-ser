@@ -131,8 +131,12 @@ export async function fetchBackendHardware() {
     const timeout = setTimeout(() => controller.abort(), 1200);
     const res = await fetch('/api/hardware-info', { signal: controller.signal });
     clearTimeout(timeout);
-    if (res.ok) {
-      return await res.json();
+    const contentType = res.headers.get('content-type') || '';
+    if (res.ok && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (data && data.status === 'online') {
+        return data;
+      }
     }
   } catch (e) {}
   return null;

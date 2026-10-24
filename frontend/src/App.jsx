@@ -43,12 +43,22 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHardwareWizardOpen, setIsHardwareWizardOpen] = useState(false);
 
-  // Settings & Tier
+  // Settings & Tier (supports localStorage and optional Vercel env variables)
   const [provider, setProvider] = useState(() => {
-    return localStorage.getItem('vecna_provider') || 'offline';
+    return (
+      localStorage.getItem('vecna_provider') ||
+      import.meta.env.VITE_DEFAULT_PROVIDER ||
+      'offline'
+    );
   });
   const [apiKey, setApiKey] = useState(() => {
-    return localStorage.getItem('vecna_api_key') || '';
+    return (
+      localStorage.getItem('vecna_api_key') ||
+      import.meta.env.VITE_SILICONFLOW_API_KEY ||
+      import.meta.env.VITE_GROQ_API_KEY ||
+      import.meta.env.VITE_OPENROUTER_API_KEY ||
+      ''
+    );
   });
   const [currentTier, setCurrentTier] = useState(() => {
     return localStorage.getItem('vecna_model_tier') || 'MID_RANGE';
@@ -134,11 +144,15 @@ export default function App() {
     const checkBackend = async () => {
       try {
         const res = await fetch('/api/health');
-        if (res.ok) {
-          setBackendConnected(true);
-        } else {
-          setBackendConnected(false);
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data && data.status === 'ok') {
+            setBackendConnected(true);
+            return;
+          }
         }
+        setBackendConnected(false);
       } catch (err) {
         setBackendConnected(false);
       }
@@ -250,7 +264,8 @@ export default function App() {
           body: formData,
         });
 
-        if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (res.ok && contentType.includes('application/json')) {
           const payload = await res.json();
           setActiveCall(payload);
           setSessionCalls((prev) => {
@@ -260,8 +275,12 @@ export default function App() {
           });
           setIsAnalyzing(false);
           return;
+        } else {
+          setBackendConnected(false);
         }
-      } catch (err) {}
+      } catch (err) {
+        setBackendConnected(false);
+      }
     }
 
     // Client-side on-device models pipeline if backend is offline or on static hosting
