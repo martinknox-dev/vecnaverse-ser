@@ -2,20 +2,13 @@ import React, { useState } from 'react';
 import {
   ShieldAlert,
   CheckCircle2,
-  AlertTriangle,
   FileText,
-  Mic,
   RotateCcw,
-  Send,
-  HelpCircle,
-  ShieldCheck,
-  Award,
   Download,
-  Flame,
   Zap,
-  BookmarkPlus,
   Save,
-  Check
+  Check,
+  Building
 } from 'lucide-react';
 import { INDICATIVE_DISCLAIMER } from '../mockData';
 
@@ -35,19 +28,19 @@ export default function DecisionSupport({
   const [caseNotesLog, setCaseNotesLog] = useState([
     {
       id: 1,
-      time: '12:04:15 PM',
-      text: 'Initial acoustic triage alert flagged. Urgency score exceeds 80.',
+      time: '12:04 PM',
+      text: 'Call flagged by queue filter based on vocal urgency.',
     },
   ]);
 
   const insights = activeCall?.triage_insights || {
-    crime_category: 'General Cybercrime Incident',
+    crime_category: 'General Incident',
     recommended_actions: [
-      '1. Verify caller identity and assess immediate financial or physical threat.',
-      '2. Advise caller not to share credentials or transfer funds.',
-      '3. Log official complaint on National Cyber Crime Reporting Portal (1930).'
+      'Verify caller location and determine if immediate financial transfers occurred.',
+      'Advise caller to hold all outgoing transactions and stop sharing screen.',
+      'Log incident docket on 1930 portal.',
     ],
-    explainability_summary: 'Awaiting triage telemetry analysis.',
+    explainability_summary: 'Pending triage analysis.',
     indicative_disclaimer: INDICATIVE_DISCLAIMER,
   };
 
@@ -65,8 +58,8 @@ export default function DecisionSupport({
     onProcessVoiceCopilot(dispatchNotes.trim());
     const newLog = {
       id: Date.now(),
-      time: new Date().toLocaleTimeString(),
-      text: `[Voice Co-Pilot Command]: ${dispatchNotes.trim()}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      text: dispatchNotes.trim(),
     };
     setCaseNotesLog((prev) => [newLog, ...prev]);
   };
@@ -89,43 +82,40 @@ export default function DecisionSupport({
     setSubmittedTickets((prev) => ({ ...prev, [ticketId]: true }));
     const newLog = {
       id: Date.now(),
-      time: new Date().toLocaleTimeString(),
-      text: `[NCRP 1930 SUBMITTED]: Golden-hour freeze request #${ticketId} dispatched to banking node.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      text: `1930 freeze request #${ticketId} dispatched to banking liaison.`,
     };
     setCaseNotesLog((prev) => [newLog, ...prev]);
   };
 
   return (
-    <div className="bg-[#0b0e17] border border-cyber-border rounded-2xl flex flex-col h-full shadow-xl overflow-hidden">
+    <div className="bg-[#0f141e] border border-[#1e293b] rounded-xl flex flex-col h-full overflow-hidden">
       {/* Panel Header */}
-      <div className="px-4 py-2.5 border-b border-cyber-border bg-[#07070c] flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-cyan-400" />
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-            Investigator Decision Support
-          </h2>
-        </div>
+      <div className="px-4 py-2.5 border-b border-[#1e293b] bg-[#0b0f17] flex items-center justify-between">
+        <h2 className="text-xs font-semibold text-slate-200">
+          Response & Incident Log
+        </h2>
 
-        {/* Action Buttons: Save Local & Export Case Report */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => onSaveCaseLocally && onSaveCaseLocally(activeCall)}
-            className={`flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded shadow-sm border transition-all ${
+            className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded border transition-colors ${
               isCaseSaved
-                ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300'
-                : 'bg-cyber-dark border-cyber-border text-slate-300 hover:border-slate-500'
+                ? 'bg-emerald-950/60 border-emerald-600/70 text-emerald-300'
+                : 'bg-[#131b26] border-[#27354a] text-slate-300 hover:border-slate-500'
             }`}
-            title="Save dossier permanently in on-device IndexedDB storage"
+            title="Save case to local browser vault"
           >
             {isCaseSaved ? (
               <>
                 <Check className="w-3 h-3 text-emerald-400" />
-                <span>Saved Local</span>
+                <span>Saved</span>
               </>
             ) : (
               <>
-                <Save className="w-3 h-3 text-cyan-400" />
-                <span>Save Case</span>
+                <Save className="w-3 h-3 text-slate-400" />
+                <span>Save case</span>
               </>
             )}
           </button>
@@ -133,98 +123,94 @@ export default function DecisionSupport({
           <button
             onClick={onExportReport}
             disabled={isExporting}
-            className="flex items-center gap-1 px-2.5 py-1 text-[11px] font-black bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-black rounded shadow-sm shadow-cyan-600/20 transition-all"
-            title="Export complete Forensic Triage Dossier in Markdown and JSON formats"
+            className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-slate-200 hover:bg-white text-slate-950 rounded transition-colors"
+            title="Export forensic dossier in Markdown and JSON"
           >
             <Download className="w-3 h-3" />
-            <span>{isExporting ? 'Exporting...' : 'Export Dossier'}</span>
+            <span>{isExporting ? 'Exporting...' : 'Export'}</span>
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="p-4 space-y-3.5 overflow-y-auto flex-1">
-        {/* Crime Category Card */}
-        <div className="bg-cyber-card border border-cyber-border rounded-xl p-3.5 space-y-1.5">
-          <span className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">
-            Classified Cybercrime Vector
+        {/* Incident Type */}
+        <div className="bg-[#131b26] border border-[#222f44] rounded-lg p-3 space-y-1">
+          <span className="text-[10px] text-slate-400 block font-medium">
+            Incident classification
           </span>
-          <div className="text-sm font-black text-white flex items-center gap-2 font-sans">
-            <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+          <p className="text-sm font-semibold text-white">
             {insights.crime_category}
-          </div>
-          <p className="text-xs text-slate-300 leading-relaxed pt-1 bg-cyber-dark/60 p-2.5 rounded-lg border border-cyber-border/70">
-            <strong className="text-cyan-400 font-semibold">Explainability: </strong>
+          </p>
+          <p className="text-xs text-slate-300 pt-1 leading-relaxed">
             {insights.explainability_summary}
           </p>
         </div>
 
-        {/* 1930 NCRP Freeze Ticket Draft */}
+        {/* 1930 Account Freeze Request Card */}
         {ticketDraft && (
-          <div className="bg-gradient-to-br from-rose-950/40 via-cyber-card to-cyber-panel border border-rose-600/50 rounded-xl p-3.5 space-y-2.5 shadow-md shadow-rose-950/30">
+          <div className="bg-[#151c28] border border-amber-600/40 rounded-lg p-3 space-y-2.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Flame className="w-4 h-4 text-rose-400 animate-pulse" />
-                <span className="text-xs font-black uppercase tracking-wider text-rose-200">
-                  1930 NCRP Freeze Ticket Draft
-                </span>
-              </div>
-              <span className="text-[10px] font-mono font-bold bg-rose-500/20 text-rose-300 border border-rose-500/50 px-2 py-0.5 rounded">
+              <span className="text-xs font-semibold text-amber-200 flex items-center gap-1.5">
+                <Building className="w-3.5 h-3.5 text-amber-400" />
+                1930 Account Freeze Request
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/70 border border-amber-700/60 text-amber-300">
                 {ticketDraft.priority}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-cyber-dark/80 p-2 rounded-lg border border-cyber-border/70">
-                <span className="text-[10px] text-slate-400 block font-mono">Ticket Docket</span>
-                <strong className="font-mono text-cyan-300">{ticketDraft.ticket_id}</strong>
+              <div className="bg-[#0b0f17] p-2 rounded border border-[#222f44]">
+                <span className="text-[10px] text-slate-400 block">Docket</span>
+                <span className="font-mono text-slate-200">{ticketDraft.ticket_id}</span>
               </div>
-              <div className="bg-cyber-dark/80 p-2 rounded-lg border border-cyber-border/70">
-                <span className="text-[10px] text-slate-400 block font-mono">Amount Involved</span>
-                <strong className="font-mono text-amber-300 text-sm">{ticketDraft.amount_involved}</strong>
+              <div className="bg-[#0b0f17] p-2 rounded border border-[#222f44]">
+                <span className="text-[10px] text-slate-400 block">Amount</span>
+                <strong className="text-amber-300">{ticketDraft.amount_involved}</strong>
               </div>
-              <div className="bg-cyber-dark/80 p-2 rounded-lg border border-cyber-border/70">
-                <span className="text-[10px] text-slate-400 block font-mono">Payment Channel</span>
-                <span className="text-slate-200 font-medium">{ticketDraft.payment_channel}</span>
+              <div className="bg-[#0b0f17] p-2 rounded border border-[#222f44]">
+                <span className="text-[10px] text-slate-400 block">Channel</span>
+                <span className="text-slate-200">{ticketDraft.payment_channel}</span>
               </div>
-              <div className="bg-cyber-dark/80 p-2 rounded-lg border border-cyber-border/70">
-                <span className="text-[10px] text-slate-400 block font-mono">Golden Hour Window</span>
-                <span className="text-emerald-400 font-medium">{ticketDraft.golden_hour_window_remaining || 'Active Hold'}</span>
+              <div className="bg-[#0b0f17] p-2 rounded border border-[#222f44]">
+                <span className="text-[10px] text-slate-400 block">Window</span>
+                <span className="text-emerald-400">{ticketDraft.golden_hour_window_remaining || 'Active window'}</span>
               </div>
             </div>
 
             <button
               onClick={() => handleSubmitTicket(ticketDraft.ticket_id)}
               disabled={isTicketSubmitted}
-              className={`w-full py-2 px-3 text-xs font-black rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-md ${
+              className={`w-full py-1.5 px-3 text-xs font-semibold rounded-md flex items-center justify-center gap-1.5 transition-colors ${
                 isTicketSubmitted
-                  ? 'bg-emerald-950/80 border border-emerald-500 text-emerald-300 cursor-default'
-                  : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
+                  ? 'bg-emerald-950/80 border border-emerald-600 text-emerald-300 cursor-default'
+                  : 'bg-amber-500 hover:bg-amber-400 text-slate-950'
               }`}
             >
               {isTicketSubmitted ? (
                 <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>NCRP Emergency Freeze Dispatched (Acknowledged)</span>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Freeze request logged with 1930</span>
                 </>
               ) : (
                 <>
-                  <Zap className="w-4 h-4 fill-current" />
-                  <span>Authorize Golden Hour Freeze via 1930 NCRP</span>
+                  <Zap className="w-3.5 h-3.5 fill-current" />
+                  <span>Dispatch 1930 freeze request</span>
                 </>
               )}
             </button>
           </div>
         )}
 
-        {/* Recommended Actions Checklist */}
-        <div className="bg-cyber-card border border-cyber-border rounded-xl p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-              Officer Triage Checklist (1930 / NCRP)
+        {/* Action Checklist */}
+        <div className="bg-[#131b26] border border-[#222f44] rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-slate-300">
+              Response checklist
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
-              {Object.values(completedActions).filter(Boolean).length} / {actions.length} Completed
+            <span className="text-[11px] text-slate-400 font-mono">
+              {Object.values(completedActions).filter(Boolean).length} / {actions.length} completed
             </span>
           </div>
 
@@ -235,17 +221,17 @@ export default function DecisionSupport({
                 <div
                   key={idx}
                   onClick={() => toggleAction(idx)}
-                  className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-start gap-2.5 transition-all ${
+                  className={`p-2 rounded-md border text-xs cursor-pointer flex items-start gap-2 transition-colors ${
                     isChecked
-                      ? 'bg-emerald-950/40 border-emerald-500/50 text-slate-300 line-through opacity-75'
-                      : 'bg-cyber-dark/80 border-cyber-border text-slate-200 hover:border-slate-500 hover:bg-cyber-dark'
+                      ? 'bg-[#0d121b] border-emerald-800/40 text-slate-400 line-through'
+                      : 'bg-[#182333] border-[#28384f] text-slate-200 hover:border-slate-500'
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={isChecked}
                     onChange={() => {}}
-                    className="mt-0.5 rounded border-slate-700 text-cyan-500 focus:ring-0 cursor-pointer"
+                    className="mt-0.5 rounded border-slate-600 text-cyan-500 cursor-pointer"
                   />
                   <span className="leading-snug">{act}</span>
                 </div>
@@ -254,101 +240,59 @@ export default function DecisionSupport({
           </div>
         </div>
 
-        {/* Wispr Voice Co-Pilot & Dispatch Notes */}
-        <div className="bg-cyber-card border border-cyber-border rounded-xl p-3.5 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                Wispr Voice Co-Pilot & Dispatch
-              </span>
-            </div>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/70 border border-emerald-800/80 px-2 py-0.5 rounded flex items-center gap-1">
-              <Mic className="w-3 h-3 text-emerald-400 animate-pulse" />
-              Wispr Flow Ready
-            </span>
-          </div>
+        {/* Dispatch Notes */}
+        <div className="bg-[#131b26] border border-[#222f44] rounded-lg p-3 space-y-2">
+          <span className="text-xs font-semibold text-slate-300 block">
+            Dispatch notes
+          </span>
 
-          <div className="relative">
-            <textarea
-              rows={3}
-              value={dispatchNotes}
-              onChange={(e) => setDispatchNotes(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Dictate live commands hands-free (e.g. 'Caller confirmed ₹45,000 sent via PhonePe, freeze account and log FIR draft')..."
-              className="w-full bg-cyber-dark border border-cyber-border rounded-lg p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none font-sans"
-            />
-          </div>
+          <textarea
+            rows={3}
+            value={dispatchNotes}
+            onChange={(e) => setDispatchNotes(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type or dictate notes (e.g. 'Caller confirms transfer of 45,000 sent via PhonePe, initiate 1930 freeze')..."
+            className="w-full bg-[#0b0f17] border border-[#222f44] rounded-md p-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 resize-none"
+          />
 
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={handleClearNote}
-                className="px-2.5 py-1 text-xs text-slate-400 hover:text-white rounded border border-cyber-border hover:border-slate-600 flex items-center gap-1 transition-colors"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>Clear</span>
-              </button>
-              <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
-                Ctrl + Enter
-              </span>
-            </div>
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={handleClearNote}
+              className="px-2.5 py-1 text-xs text-slate-400 hover:text-white rounded border border-[#222f44] transition-colors"
+            >
+              Clear
+            </button>
 
             <button
               onClick={handleProcessCopilotSubmit}
               disabled={!dispatchNotes.trim() || isProcessingCopilot}
-              className={`px-3 py-1.5 text-xs font-black rounded-lg flex items-center gap-1.5 transition-all ${
+              className={`px-3 py-1 text-xs font-semibold rounded-md flex items-center gap-1.5 transition-colors ${
                 dispatchNotes.trim() && !isProcessingCopilot
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-black shadow-md shadow-cyan-500/20'
+                  ? 'bg-slate-200 hover:bg-white text-slate-950'
                   : 'bg-slate-800 text-slate-500 cursor-not-allowed'
               }`}
             >
-              {isProcessingCopilot ? (
-                <>
-                  <div className="w-3 h-3 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-                  <span>Processing Command...</span>
-                </>
-              ) : (
-                <>
-                  <Zap className="w-3.5 h-3.5 fill-current" />
-                  <span>Process Voice Command</span>
-                </>
-              )}
+              <span>{isProcessingCopilot ? 'Processing...' : 'Apply note'}</span>
             </button>
           </div>
 
-          {/* Logged notes stream */}
+          {/* Audit Log */}
           {caseNotesLog.length > 0 && (
-            <div className="pt-2 border-t border-cyber-border/70 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase text-slate-400">
-                Incident Audit Log:
-              </span>
+            <div className="pt-2 border-t border-[#222f44] space-y-1">
+              <span className="text-[10px] text-slate-500 block">Incident history</span>
               <div className="space-y-1 max-h-24 overflow-y-auto">
                 {caseNotesLog.map((log) => (
                   <div
                     key={log.id}
-                    className="p-2 rounded bg-cyber-dark/60 border border-cyber-border/50 text-[11px] text-slate-300"
+                    className="p-1.5 rounded bg-[#0b0f17] border border-[#222f44] text-[11px] text-slate-300"
                   >
-                    <span className="font-mono text-[10px] text-cyan-400 block mb-0.5">
-                      {log.time}
-                    </span>
+                    <span className="text-[10px] text-slate-500 block">{log.time}</span>
                     <p>{log.text}</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
-        </div>
-
-        {/* Responsible AI Indicative Mandate Banner */}
-        <div className="bg-amber-950/20 border border-amber-600/40 rounded-xl p-3 space-y-1">
-          <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>Responsible AI Guardrail</span>
-          </div>
-          <p className="text-[11px] text-amber-200/90 leading-relaxed font-sans">
-            {insights.indicative_disclaimer || INDICATIVE_DISCLAIMER}
-          </p>
         </div>
       </div>
     </div>

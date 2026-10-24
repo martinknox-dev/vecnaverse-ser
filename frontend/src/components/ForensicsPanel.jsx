@@ -4,20 +4,11 @@ import {
   Mic,
   Play,
   Pause,
-  RotateCcw,
   Activity,
   AudioWaveform,
   Volume2,
-  VolumeX,
-  AlertTriangle,
-  Clock,
-  Sparkles,
-  CheckCircle2,
-  Radio,
   FileAudio,
-  Zap,
-  Gauge,
-  Sliders
+  Radio
 } from 'lucide-react';
 import { cyberAudioPlayer } from '../services/audioSynthesizer';
 
@@ -57,7 +48,6 @@ export default function ForensicsPanel({
     onAnalyzeAudioFile(uploadFile, transcriptHint);
   };
 
-  // Clean up audio on unmount
   useEffect(() => {
     return () => {
       cyberAudioPlayer.stop();
@@ -71,7 +61,6 @@ export default function ForensicsPanel({
     };
   }, []);
 
-  // Live Mic Stream with 24-band frequency spectrum analyser
   const toggleRecording = async () => {
     if (isRecording) {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -95,7 +84,7 @@ export default function ForensicsPanel({
         audioContextRef.current = audioCtx;
         const source = audioCtx.createMediaStreamSource(stream);
         const analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 64; // 32 frequency bins
+        analyser.fftSize = 64;
         source.connect(analyser);
         analyserRef.current = analyser;
 
@@ -103,7 +92,6 @@ export default function ForensicsPanel({
         const updateSpectrum = () => {
           if (!analyserRef.current) return;
           analyserRef.current.getByteFrequencyData(dataArray);
-          // Pick 24 frequency bands
           const bands = [];
           for (let i = 0; i < 24; i++) {
             const raw = dataArray[i] || 0;
@@ -130,18 +118,17 @@ export default function ForensicsPanel({
         mediaRecorder.onstop = () => {
           const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
           const file = new File([audioBlob], 'live_mic_recording.wav', { type: 'audio/wav' });
-          onAnalyzeAudioFile(file, 'Live caller microphone transmission captured.');
+          onAnalyzeAudioFile(file, 'Live microphone recording.');
         };
 
         mediaRecorder.start(2000);
         setIsRecording(true);
       } catch (err) {
-        alert('Microphone access denied: ' + err.message);
+        alert('Microphone unavailable: ' + err.message);
       }
     }
   };
 
-  // Play/Pause Playable Distress Audio
   const togglePlayAudio = () => {
     if (isPlayingAudio) {
       cyberAudioPlayer.pause();
@@ -186,34 +173,34 @@ export default function ForensicsPanel({
     switch (emotion) {
       case 'fear':
         return {
-          bar: 'bg-rose-500 shadow-sm shadow-rose-500/50',
+          bar: 'bg-rose-500',
           text: 'text-rose-400',
-          bg: 'bg-rose-500/10 border-rose-500/40',
+          badge: 'bg-rose-950/60 text-rose-300 border-rose-800/60',
         };
       case 'distress':
         return {
-          bar: 'bg-amber-500 shadow-sm shadow-amber-500/50',
+          bar: 'bg-amber-500',
           text: 'text-amber-400',
-          bg: 'bg-amber-500/10 border-amber-500/40',
+          badge: 'bg-amber-950/60 text-amber-300 border-amber-800/60',
         };
       case 'nervousness':
         return {
-          bar: 'bg-yellow-400 shadow-sm shadow-yellow-400/50',
+          bar: 'bg-yellow-400',
           text: 'text-yellow-300',
-          bg: 'bg-yellow-500/10 border-yellow-500/40',
+          badge: 'bg-yellow-950/60 text-yellow-300 border-yellow-800/60',
         };
       case 'anger':
         return {
-          bar: 'bg-red-500 shadow-sm shadow-red-500/50',
+          bar: 'bg-red-500',
           text: 'text-red-400',
-          bg: 'bg-red-500/10 border-red-500/40',
+          badge: 'bg-red-950/60 text-red-300 border-red-800/60',
         };
       case 'neutral':
       default:
         return {
           bar: 'bg-slate-400',
           text: 'text-slate-300',
-          bg: 'bg-slate-500/10 border-slate-500/40',
+          badge: 'bg-slate-900 text-slate-300 border-slate-700',
         };
     }
   };
@@ -231,13 +218,13 @@ export default function ForensicsPanel({
     jitter_tremor_pct: 1.5,
     speech_rate_sps: 4.2,
     rms_energy_db: -20.0,
-    vocal_anomaly: 'Awaiting signal feed...',
+    vocal_anomaly: 'Signal stable.',
     voice_activity_ratio: 0.85,
     confidence_score: 0.90,
   };
 
   const transcript = activeCall?.transcript || {
-    raw_redacted: 'No active call selected or analysis pending.',
+    raw_redacted: 'No transcript available for this call.',
     pii_masked_count: 0,
     detected_keywords: [],
   };
@@ -251,12 +238,13 @@ export default function ForensicsPanel({
 
     return parts.map((part, idx) => {
       if (part.startsWith('[REDACTED-')) {
+        const label = part.replace('[REDACTED-', '').replace(']', '');
         return (
           <span
             key={idx}
-            className="inline-flex items-center font-mono text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/50 px-1.5 py-0.5 rounded mx-1 shadow-sm"
+            className="inline-flex items-center font-mono text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1 py-0.5 rounded mx-1"
           >
-            {part}
+            {label} masked
           </span>
         );
       }
@@ -277,7 +265,7 @@ export default function ForensicsPanel({
               return (
                 <span
                   key={sIdx}
-                  className="font-bold text-rose-300 underline decoration-rose-500 decoration-2 px-1 py-0.2 bg-rose-950/60 border border-rose-800/60 rounded"
+                  className="font-semibold text-rose-300 underline decoration-rose-500/70 underline-offset-2 px-1 bg-rose-950/40 rounded"
                 >
                   {subPart}
                 </span>
@@ -291,69 +279,69 @@ export default function ForensicsPanel({
   };
 
   return (
-    <div className="bg-[#0b0e17] border border-cyber-border rounded-2xl flex flex-col h-full shadow-xl overflow-hidden">
+    <div className="bg-[#0f141e] border border-[#1e293b] rounded-xl flex flex-col h-full overflow-hidden">
       {/* Panel Top Mode Tabs */}
-      <div className="px-4 py-2.5 border-b border-cyber-border bg-[#07070c] flex flex-wrap items-center justify-between gap-2.5">
+      <div className="px-4 py-2.5 border-b border-[#1e293b] bg-[#0b0f17] flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex items-center gap-2">
           <Activity className="w-4 h-4 text-cyan-400" />
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-            Speech Emotion Forensics & Biomarkers
+          <h2 className="text-xs font-semibold text-slate-200">
+            Voice analysis
           </h2>
         </div>
 
         {/* Input Mode Switcher */}
-        <div className="flex items-center bg-cyber-dark p-0.5 rounded-lg border border-cyber-border text-xs">
+        <div className="flex items-center bg-[#131b26] p-0.5 rounded-lg border border-[#222f44] text-xs">
           <button
             onClick={() => setActiveTab('upload')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all font-semibold ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs transition-colors ${
               activeTab === 'upload'
-                ? 'bg-cyan-600 text-black font-extrabold shadow-sm'
+                ? 'bg-slate-200 text-slate-950 font-semibold'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Upload WAV</span>
+            <span>Upload file</span>
           </button>
 
           <button
             onClick={() => setActiveTab('mic')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all font-semibold ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs transition-colors ${
               activeTab === 'mic'
-                ? 'bg-cyan-600 text-black font-extrabold shadow-sm'
+                ? 'bg-slate-200 text-slate-950 font-semibold'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <Mic className="w-3.5 h-3.5" />
-            <span>Live Mic Stream</span>
+            <span>Live audio</span>
           </button>
 
           <button
             onClick={() => setActiveTab('simulate')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition-all font-semibold ${
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs transition-colors ${
               activeTab === 'simulate'
-                ? 'bg-cyan-600 text-black font-extrabold shadow-sm'
+                ? 'bg-slate-200 text-slate-950 font-semibold'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
             <Radio className="w-3.5 h-3.5" />
-            <span>Simulate Call</span>
+            <span>Test scenarios</span>
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="p-4 space-y-3.5 overflow-y-auto flex-1">
-        {/* Dynamic Mode Controller Form */}
+        {/* Dynamic Mode Controller */}
         {activeTab === 'upload' && (
           <form
             onSubmit={handleUploadSubmit}
-            className="bg-cyber-dark/60 border border-cyber-border rounded-xl p-3 flex flex-col md:flex-row items-center gap-2.5"
+            className="bg-[#131b26] border border-[#222f44] rounded-lg p-2.5 flex flex-col md:flex-row items-center gap-2"
           >
             <div className="flex-1 w-full flex items-center gap-2">
-              <label className="flex items-center gap-2 px-3 py-2 bg-cyber-card border border-cyber-border rounded-lg cursor-pointer hover:border-slate-500 text-xs text-slate-200 shrink-0 transition-colors">
-                <FileAudio className="w-4 h-4 text-cyan-400" />
+              <label className="flex items-center gap-2 px-3 py-1.5 bg-[#182333] border border-[#2a384d] rounded-md cursor-pointer hover:border-slate-500 text-xs text-slate-200 shrink-0 transition-colors">
+                <FileAudio className="w-3.5 h-3.5 text-cyan-400" />
                 <span className="truncate max-w-[130px]">
-                  {uploadFile ? uploadFile.name : 'Choose .wav File'}
+                  {uploadFile ? uploadFile.name : 'Select .wav file'}
                 </span>
                 <input
                   type="file"
@@ -365,147 +353,129 @@ export default function ForensicsPanel({
 
               <input
                 type="text"
-                placeholder="Optional transcript hint (e.g. caller reporting digital arrest)..."
+                placeholder="Optional call context note..."
                 value={transcriptHint}
                 onChange={(e) => setTranscriptHint(e.target.value)}
-                className="flex-1 bg-cyber-dark border border-cyber-border rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                className="flex-1 bg-[#0b0f17] border border-[#222f44] rounded-md px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
               />
             </div>
 
             <button
               type="submit"
               disabled={!uploadFile || isAnalyzing}
-              className={`w-full md:w-auto px-4 py-2 text-xs font-black rounded-lg flex items-center justify-center gap-1.5 transition-all shrink-0 ${
+              className={`w-full md:w-auto px-4 py-1.5 text-xs font-semibold rounded-md flex items-center justify-center gap-1.5 transition-colors shrink-0 ${
                 !uploadFile || isAnalyzing
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                  : 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-md shadow-cyan-500/20'
+                  : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950'
               }`}
             >
               {isAnalyzing ? (
-                <>
-                  <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
-                  <span>Analyzing Audio...</span>
-                </>
+                <span>Analyzing...</span>
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Run Forensic Analysis</span>
+                  <span>Analyze</span>
                 </>
               )}
             </button>
           </form>
         )}
 
-        {/* Live Mic Mode with 24-band Frequency Spectrum Visualizer */}
+        {/* Live Mic Mode */}
         {activeTab === 'mic' && (
-          <div className="bg-cyber-dark/60 border border-cyber-border rounded-xl p-3 space-y-2.5">
+          <div className="bg-[#131b26] border border-[#222f44] rounded-lg p-3 space-y-2.5">
             <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
                 <div
-                  className={`w-3 h-3 rounded-full ${
-                    isRecording ? 'bg-red-500 animate-ping' : 'bg-slate-600'
+                  className={`w-2.5 h-2.5 rounded-full ${
+                    isRecording ? 'bg-red-500 animate-pulse' : 'bg-slate-600'
                   }`}
                 ></div>
                 <div>
-                  <p className="text-xs font-bold text-white">
-                    {isRecording ? 'Live Mic Stream Active (Streaming 2.0s Chunks)' : 'Microphone Stream Standby'}
+                  <p className="text-xs font-semibold text-slate-200">
+                    {isRecording ? 'Listening via microphone' : 'Microphone standby'}
                   </p>
                   <p className="text-[11px] text-slate-400">
-                    Real-time speech emotion recognition & voice biomarker tracking
+                    Continuous sliding window analysis
                   </p>
                 </div>
               </div>
 
               <button
                 onClick={toggleRecording}
-                className={`px-4 py-1.5 text-xs font-bold rounded-lg flex items-center gap-2 transition-all ${
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md flex items-center gap-1.5 transition-colors ${
                   isRecording
-                    ? 'bg-red-600 hover:bg-red-500 text-white animate-pulse shadow-md shadow-red-600/30'
-                    : 'bg-cyan-500 hover:bg-cyan-400 text-black'
+                    ? 'bg-red-600 hover:bg-red-500 text-white'
+                    : 'bg-cyan-500 hover:bg-cyan-400 text-slate-950'
                 }`}
               >
                 <Mic className="w-3.5 h-3.5" />
-                <span>{isRecording ? 'Stop Live Mic' : 'Start Live Mic Stream'}</span>
+                <span>{isRecording ? 'Stop input' : 'Start microphone'}</span>
               </button>
             </div>
 
-            {/* 24-Band Reactive Audio Spectrum */}
-            <div className="bg-cyber-card p-2.5 rounded-lg border border-cyber-border space-y-1">
-              <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                <span className="flex items-center gap-1">
-                  <AudioWaveform className="w-3 h-3 text-cyan-400" />
-                  24-Band Voice Spectrum (Web Audio API Analyser)
-                </span>
-                <span className={isRecording ? 'text-emerald-400' : 'text-slate-500'}>
-                  {isRecording ? 'LIVE FEED ACTIVE' : 'AWAITING INPUT'}
-                </span>
-              </div>
-              <div className="h-10 flex items-end gap-1 px-1 bg-cyber-dark/80 rounded border border-cyber-border/60">
-                {freqBands.map((val, idx) => {
-                  let barColor = 'bg-cyan-500';
-                  if (idx >= 14) barColor = 'bg-amber-400';
-                  if (idx >= 20) barColor = 'bg-rose-500';
-                  return (
-                    <div
-                      key={idx}
-                      className={`flex-1 rounded-t-sm transition-all duration-75 ${barColor}`}
-                      style={{ height: `${Math.max(4, isRecording ? val : 4)}%` }}
-                    ></div>
-                  );
-                })}
+            {/* Frequency spectrum display */}
+            <div className="bg-[#0b0f17] p-2 rounded border border-[#222f44]">
+              <div className="h-8 flex items-end gap-1 px-1">
+                {freqBands.map((val, idx) => (
+                  <div
+                    key={idx}
+                    className="flex-1 rounded-t-sm transition-all duration-75 bg-cyan-500/80"
+                    style={{ height: `${Math.max(4, isRecording ? val : 4)}%` }}
+                  ></div>
+                ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* Playable Interactive Audio Player Bar */}
-        <div className="bg-gradient-to-r from-cyan-950/40 via-cyber-card to-cyber-dark border border-cyan-800/50 rounded-xl p-3 space-y-2 shadow-md">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={togglePlayAudio}
-                className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
-                  isPlayingAudio
-                    ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-md shadow-rose-600/30'
-                    : 'bg-cyan-500 hover:bg-cyan-400 text-black shadow-md shadow-cyan-500/20'
-                }`}
-                title={isPlayingAudio ? 'Pause Playback' : 'Play Synthesized Scenario Audio'}
-              >
-                {isPlayingAudio ? (
-                  <Pause className="w-3.5 h-3.5 fill-current" />
-                ) : (
-                  <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-                )}
-              </button>
-
-              <div>
-                <span className="text-xs font-bold text-white block">
-                  {isPlayingAudio ? 'Playback Synchronized with SER Timeline' : 'Play Scenario Distress Call'}
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono">
-                  {Math.floor(audioPlaybackSec)}s / {Math.floor(audioDurationSec)}s • Realistic Emergency Audio Synthesizer
-                </span>
-              </div>
-            </div>
-
-            {/* Volume Slider */}
-            <div className="flex items-center gap-1.5 text-xs text-slate-400">
-              <Volume2 className="w-3.5 h-3.5 text-cyan-400" />
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={audioVolume}
-                onChange={handleVolumeChange}
-                className="w-16 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-              />
+        {activeTab === 'simulate' && (
+          <div className="bg-[#131b26] border border-[#222f44] rounded-lg p-3 space-y-2">
+            <span className="text-xs font-semibold text-slate-200 block">
+              Simulate call escalation scenarios
+            </span>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {[
+                { id: 'digital_arrest', label: 'Digital arrest', tag: 'High fear' },
+                { id: 'upi_fraud', label: 'Remote APK drain', tag: 'High distress' },
+                { id: 'distressed_victim', label: 'Sextortion threat', tag: 'Critical distress' },
+                { id: 'informant', label: 'Mule account tip', tag: 'Moderate tension' },
+              ].map((scen) => (
+                <button
+                  key={scen.id}
+                  onClick={() => onSimulateScenario(scen.id)}
+                  className="p-2.5 rounded-md bg-[#182333] border border-[#2a384d] hover:border-slate-500 text-left transition-colors"
+                >
+                  <div className="text-xs font-semibold text-slate-200">{scen.label}</div>
+                  <div className="text-[10px] text-cyan-400 mt-0.5">{scen.tag}</div>
+                </button>
+              ))}
             </div>
           </div>
+        )}
 
-          {/* Scrubbing Bar */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-slate-400">0.0s</span>
+        {/* Audio Player Bar */}
+        <div className="bg-[#131b26] border border-[#222f44] rounded-lg p-2.5 flex items-center justify-between gap-3">
+          <button
+            onClick={togglePlayAudio}
+            className={`w-7 h-7 rounded-md flex items-center justify-center transition-colors shrink-0 ${
+              isPlayingAudio
+                ? 'bg-rose-600 text-white'
+                : 'bg-slate-200 hover:bg-white text-slate-950'
+            }`}
+            title={isPlayingAudio ? 'Pause' : 'Play call audio'}
+          >
+            {isPlayingAudio ? (
+              <Pause className="w-3.5 h-3.5 fill-current" />
+            ) : (
+              <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+            )}
+          </button>
+
+          <div className="flex-1 flex items-center gap-2">
+            <span className="text-[11px] font-mono text-slate-400 w-8">
+              {Math.floor(audioPlaybackSec)}s
+            </span>
             <input
               type="range"
               min="0"
@@ -513,39 +483,48 @@ export default function ForensicsPanel({
               step="0.1"
               value={audioPlaybackSec}
               onChange={handleSeek}
-              className="flex-1 h-1.5 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+              className="flex-1 h-1 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-cyan-400"
             />
-            <span className="text-[10px] font-mono text-slate-400">{Math.floor(audioDurationSec)}s</span>
+            <span className="text-[11px] font-mono text-slate-400 w-8 text-right">
+              {Math.floor(audioDurationSec)}s
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
+            <Volume2 className="w-3.5 h-3.5" />
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={audioVolume}
+              onChange={handleVolumeChange}
+              className="w-14 h-1 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+            />
           </div>
         </div>
 
-        {/* Emotion Probability Bars */}
-        <div className="bg-cyber-card border border-cyber-border rounded-xl p-3.5 space-y-2.5">
+        {/* Emotion Breakdown */}
+        <div className="bg-[#131b26] border border-[#222f44] rounded-lg p-3 space-y-2.5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                Emotion Class Probabilities
-              </span>
-              <span className="text-[10px] font-mono text-slate-400">(Normalized 0.0 - 1.0)</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs">
-              <span className="text-slate-400">Dominant Emotion:</span>
-              <span
-                className={`font-bold capitalize font-mono px-2 py-0.5 rounded border ${
-                  getEmotionColor(activeCall?.dominant_emotion).bg
-                } ${getEmotionColor(activeCall?.dominant_emotion).text}`}
-              >
-                {activeCall?.dominant_emotion || 'neutral'}
-              </span>
-            </div>
+            <span className="text-xs font-semibold text-slate-300">
+              Vocal state distribution
+            </span>
+            <span
+              className={`text-[11px] font-medium capitalize px-2 py-0.5 rounded border ${
+                getEmotionColor(activeCall?.dominant_emotion).badge
+              }`}
+            >
+              Dominant: {activeCall?.dominant_emotion || 'neutral'}
+            </span>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {[
               { key: 'fear', label: 'Fear' },
               { key: 'distress', label: 'Distress' },
-              { key: 'nervousness', label: 'Nervousness' },
-              { key: 'anger', label: 'Anger' },
+              { key: 'nervousness', label: 'Tension' },
+              { key: 'anger', label: 'Agitation' },
               { key: 'neutral', label: 'Neutral' },
             ].map(({ key, label }) => {
               const prob = emotionProbs[key] ?? 0.0;
@@ -553,13 +532,13 @@ export default function ForensicsPanel({
               const colorInfo = getEmotionColor(key);
               return (
                 <div key={key} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs font-medium">
+                  <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-300">{label}</span>
-                    <span className={`font-mono font-bold ${colorInfo.text}`}>{pct}% ({prob.toFixed(2)})</span>
+                    <span className="font-mono text-slate-400">{pct}%</span>
                   </div>
-                  <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden border border-cyber-border/40">
+                  <div className="w-full bg-slate-900 rounded-full h-1 overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${colorInfo.bar}`}
+                      className={`h-full rounded-full transition-all duration-300 ${colorInfo.bar}`}
                       style={{ width: `${pct}%` }}
                     ></div>
                   </div>
@@ -569,101 +548,65 @@ export default function ForensicsPanel({
           </div>
         </div>
 
-        {/* 6 Acoustic Biomarker Telemetry Cards */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-              Acoustic Biomarkers (Hybrid ONNX + DSP)
-            </span>
-            <span className="text-[10px] font-mono text-cyan-400">YIN • Micro-Tremor • Onsets</span>
-          </div>
+        {/* Acoustic Metrics Grid */}
+        <div className="space-y-1.5">
+          <span className="text-xs font-semibold text-slate-300 block">
+            Acoustic metrics
+          </span>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-xl">
-              <div className="text-[10px] text-slate-400 font-medium">Pitch (F0)</div>
-              <div className="text-base font-bold font-mono text-white mt-0.5">
-                {biomarkers.pitch_hz} <span className="text-[10px] text-slate-400 font-normal">Hz</span>
-              </div>
-              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
-                {biomarkers.pitch_hz > 240 ? 'Acute elevation' : 'Baseline vocal zone'}
-              </div>
+            <div className="bg-[#131b26] border border-[#222f44] p-2.5 rounded-lg">
+              <span className="text-[10px] text-slate-400 block">Pitch (F0)</span>
+              <strong className="text-sm font-semibold text-white block mt-0.5">{biomarkers.pitch_hz} Hz</strong>
             </div>
 
-            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-xl">
-              <div className="text-[10px] text-slate-400 font-medium">Jitter/Tremor</div>
-              <div className="text-base font-bold font-mono text-amber-300 mt-0.5">
-                {biomarkers.jitter_tremor_pct} <span className="text-[10px] text-slate-400 font-normal">%</span>
-              </div>
-              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
-                {biomarkers.jitter_tremor_pct > 3.0 ? 'High tremor' : 'Normal jitter'}
-              </div>
+            <div className="bg-[#131b26] border border-[#222f44] p-2.5 rounded-lg">
+              <span className="text-[10px] text-slate-400 block">Vocal tremor</span>
+              <strong className="text-sm font-semibold text-amber-300 block mt-0.5">{biomarkers.jitter_tremor_pct}%</strong>
             </div>
 
-            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-xl">
-              <div className="text-[10px] text-slate-400 font-medium">Speech Rate</div>
-              <div className="text-base font-bold font-mono text-cyan-300 mt-0.5">
-                {biomarkers.speech_rate_sps} <span className="text-[10px] text-slate-400 font-normal">sps</span>
-              </div>
-              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
-                Syllables / sec
-              </div>
+            <div className="bg-[#131b26] border border-[#222f44] p-2.5 rounded-lg">
+              <span className="text-[10px] text-slate-400 block">Pace</span>
+              <strong className="text-sm font-semibold text-cyan-300 block mt-0.5">{biomarkers.speech_rate_sps} syl/s</strong>
             </div>
 
-            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-xl">
-              <div className="text-[10px] text-slate-400 font-medium">Loudness (RMS)</div>
-              <div className="text-base font-bold font-mono text-slate-100 mt-0.5">
-                {biomarkers.rms_energy_db} <span className="text-[10px] text-slate-400 font-normal">dB</span>
-              </div>
-              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
-                Decibels FS
-              </div>
+            <div className="bg-[#131b26] border border-[#222f44] p-2.5 rounded-lg">
+              <span className="text-[10px] text-slate-400 block">Loudness</span>
+              <strong className="text-sm font-semibold text-slate-200 block mt-0.5">{biomarkers.rms_energy_db} dB</strong>
             </div>
 
-            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-xl">
-              <div className="text-[10px] text-slate-400 font-medium">VAD Speech</div>
-              <div className="text-base font-bold font-mono text-emerald-400 mt-0.5">
-                {Math.round((biomarkers.voice_activity_ratio ?? 0.85) * 100)} <span className="text-[10px] text-slate-400 font-normal">%</span>
-              </div>
-              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
-                Silero VAD Ratio
-              </div>
+            <div className="bg-[#131b26] border border-[#222f44] p-2.5 rounded-lg">
+              <span className="text-[10px] text-slate-400 block">Speech activity</span>
+              <strong className="text-sm font-semibold text-emerald-300 block mt-0.5">
+                {Math.round((biomarkers.voice_activity_ratio ?? 0.85) * 100)}%
+              </strong>
             </div>
 
-            <div className="bg-cyber-card border border-cyber-border p-2.5 rounded-xl">
-              <div className="text-[10px] text-slate-400 font-medium">Confidence</div>
-              <div className="text-base font-bold font-mono text-purple-300 mt-0.5">
-                {Math.round((biomarkers.confidence_score ?? 0.90) * 100)} <span className="text-[10px] text-slate-400 font-normal">%</span>
-              </div>
-              <div className="text-[9px] text-slate-400 mt-0.5 truncate">
-                Forensic Rating
-              </div>
+            <div className="bg-[#131b26] border border-[#222f44] p-2.5 rounded-lg">
+              <span className="text-[10px] text-slate-400 block">Signal rating</span>
+              <strong className="text-sm font-semibold text-slate-200 block mt-0.5">
+                {Math.round((biomarkers.confidence_score ?? 0.90) * 100)}%
+              </strong>
             </div>
           </div>
 
-          <div className="bg-cyan-950/40 border border-cyan-800/60 p-2 rounded-xl flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span className="text-xs text-cyan-200 font-medium">
-              Diagnostic Tag: <strong className="text-white font-semibold">{biomarkers.vocal_anomaly}</strong>
-            </span>
-          </div>
+          <p className="text-xs text-slate-400 bg-[#131b26] px-3 py-1.5 rounded-md border border-[#222f44]">
+            Assessment: <strong className="text-slate-200 font-medium">{biomarkers.vocal_anomaly}</strong>
+          </p>
         </div>
 
-        {/* Emotion Timeline Strip with Synced Cursor */}
-        <div className="bg-cyber-card border border-cyber-border rounded-xl p-3.5 space-y-2">
+        {/* Timeline Progression */}
+        <div className="bg-[#131b26] border border-[#222f44] rounded-lg p-3 space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold uppercase tracking-wider text-slate-200">
-              Temporal Emotion Timeline (2.5s Slices)
-            </span>
-            <span className="text-[11px] text-slate-400 font-mono">
-              {timeline.length} segments analyzed
-            </span>
+            <span className="font-semibold text-slate-300">Call progression</span>
+            <span className="text-[11px] text-slate-400">{timeline.length} segments</span>
           </div>
 
           <div className="relative">
-            <div className="flex gap-1.5 h-8 w-full bg-cyber-dark p-1 rounded-lg border border-cyber-border/70 overflow-hidden">
+            <div className="flex gap-1 h-6 w-full bg-[#0b0f17] p-1 rounded-md border border-[#222f44] overflow-hidden">
               {timeline.length === 0 ? (
-                <div className="text-[11px] text-slate-500 italic flex items-center px-2">
-                  No timeline slices available.
+                <div className="text-[11px] text-slate-500 italic px-1">
+                  No segments.
                 </div>
               ) : (
                 timeline.map((seg, idx) => {
@@ -671,64 +614,39 @@ export default function ForensicsPanel({
                   return (
                     <div
                       key={idx}
-                      title={`${seg.start_sec}s - ${seg.end_sec}s: ${seg.emotion.toUpperCase()} (Urgency ${seg.urgency})`}
-                      className={`flex-1 rounded flex items-center justify-center text-[10px] font-mono font-bold text-white transition-all hover:opacity-90 ${colorInfo.bar}`}
+                      title={`${seg.start_sec}s - ${seg.end_sec}s: ${seg.emotion} (${seg.urgency})`}
+                      className={`flex-1 rounded-sm text-[9px] font-mono flex items-center justify-center text-white ${colorInfo.bar}`}
                     >
-                      <span className="truncate px-1">{seg.emotion[0].toUpperCase()}:{seg.urgency}</span>
+                      <span className="truncate px-0.5">{seg.urgency}</span>
                     </div>
                   );
                 })
               )}
             </div>
 
-            {/* Real-time playback cursor line */}
             {isPlayingAudio && audioDurationSec > 0 && (
               <div
-                className="absolute top-0 bottom-0 w-0.5 bg-white shadow-md shadow-white transition-all pointer-events-none"
+                className="absolute top-0 bottom-0 w-0.5 bg-white shadow-sm transition-all pointer-events-none"
                 style={{ left: `${Math.min(100, (audioPlaybackSec / audioDurationSec) * 100)}%` }}
               ></div>
             )}
           </div>
-
-          <div className="flex justify-between text-[10px] text-slate-500 font-mono">
-            <span>0.0s</span>
-            <span>{timeline.length > 0 ? `${timeline[timeline.length - 1].end_sec}s` : '0.0s'}</span>
-          </div>
         </div>
 
-        {/* Redacted Call Transcript Box */}
-        <div className="bg-cyber-card border border-cyber-border rounded-xl p-3.5 space-y-2">
+        {/* Transcript Box */}
+        <div className="bg-[#131b26] border border-[#222f44] rounded-lg p-3 space-y-2">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                Redacted Call Transcript
-              </span>
-              <span className="text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded font-mono">
-                {transcript.pii_masked_count} PII MASKED
-              </span>
-            </div>
-            <span className="text-[11px] text-slate-400">
-              Regex PII Masking: Phone, Aadhaar, OTP, Account
+            <span className="text-xs font-semibold text-slate-300">
+              Transcript
+            </span>
+            <span className="text-[10px] text-slate-400">
+              {transcript.pii_masked_count} identifiers masked
             </span>
           </div>
 
-          <div className="bg-cyber-dark/80 border border-cyber-border/80 p-3 rounded-lg text-xs leading-relaxed text-slate-200 min-h-[65px]">
+          <div className="bg-[#0b0f17] border border-[#222f44] p-3 rounded-md text-xs leading-relaxed text-slate-200 min-h-[60px]">
             {renderHighlightedTranscript(transcript.raw_redacted, transcript.detected_keywords)}
           </div>
-
-          {transcript.detected_keywords && transcript.detected_keywords.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              <span className="text-[11px] text-slate-400 font-medium">Threat Vectors:</span>
-              {transcript.detected_keywords.map((kw, i) => (
-                <span
-                  key={i}
-                  className="text-[10px] font-bold uppercase bg-red-950/70 text-red-300 border border-red-800/80 px-2 py-0.5 rounded font-mono"
-                >
-                  {kw}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>

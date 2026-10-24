@@ -1,55 +1,46 @@
 /**
- * VECNA-Pulse Hardware-Adaptive Engine & On-Device Storage Manager
- * Detects CPU, RAM, GPU/WebGPU, and Storage to recommend optimal AI tier.
+ * Hardware Detection & Execution Tier Configuration
  */
 
 export const MODEL_TIERS = {
   HIGH_END: {
     id: 'HIGH_END',
-    name: 'High-End Neural + DSP',
-    badge: 'RTX / WebGPU / High-Perf',
-    color: 'from-cyan-500 to-blue-600',
-    border: 'border-cyan-500',
-    description: 'Full Hybrid ONNX + High-Precision Acoustic Biomarker DSP. Recommended for 8+ cores or discrete GPU.',
-    computeMode: 'Local Hybrid (ONNX / WebGPU + High-Precision DSP)',
+    name: 'Performance',
+    badge: 'Hardware Accelerated',
+    description: 'Uses available GPU and multi-core acceleration for highest resolution acoustic analysis.',
+    computeMode: 'Local Accelerated',
     latency: '< 15 ms',
     memoryReq: '8 GB+ RAM',
     offlineCapable: true,
   },
   MID_RANGE: {
     id: 'MID_RANGE',
-    name: 'Mid-Range Quantized',
-    badge: 'Quantized Q8 / Fast',
-    color: 'from-amber-500 to-orange-600',
-    border: 'border-amber-500',
-    description: 'Quantized on-device acoustic models with balanced DSP pipeline. Recommended for 4-8 cores.',
-    computeMode: 'On-Device Lightweight Cache + Web Audio DSP',
+    name: 'Balanced',
+    badge: 'Standard CPU',
+    description: 'Optimized local processing designed for everyday laptops and desktops.',
+    computeMode: 'Local Standard',
     latency: '< 25 ms',
     memoryReq: '4-8 GB RAM',
     offlineCapable: true,
   },
   LOW_END: {
     id: 'LOW_END',
-    name: 'Zero-Download Pure Web Audio DSP',
-    badge: '100% Client DSP / Ultra-Lite',
-    color: 'from-emerald-500 to-teal-600',
-    border: 'border-emerald-500',
-    description: '0 MB model download! Runs 100% client-side DSP algorithms in JavaScript for pitch, jitter, and speech cadence.',
-    computeMode: 'Pure Browser Web Audio API (0 MB Download)',
+    name: 'Lightweight',
+    badge: 'Zero Download',
+    description: 'Runs entirely in the browser with no model downloads. Ideal for older or low-power devices.',
+    computeMode: 'In-Browser Audio Engine',
     latency: '< 8 ms',
     memoryReq: '<= 4 GB RAM',
     offlineCapable: true,
   },
   CLOUD_BYOK: {
     id: 'CLOUD_BYOK',
-    name: 'SiliconFlow Cloud BYOK',
-    badge: 'SiliconFlow / Cloud BYOK',
-    color: 'from-purple-500 to-indigo-600',
-    border: 'border-purple-500',
-    description: 'Zero local compute. Direct on-cloud inference via SiliconFlow (SenseVoiceSmall + Qwen 2.5 7B), Groq, or OpenRouter.',
-    computeMode: 'Free Cloud BYOK API (SiliconFlow / Groq)',
-    latency: '~120-250 ms',
-    memoryReq: 'Any Device',
+    name: 'Cloud Service',
+    badge: 'SiliconFlow / Groq',
+    description: 'Routes transcription and triage through your chosen API provider.',
+    computeMode: 'External API',
+    latency: '~150 ms',
+    memoryReq: 'Any system',
     offlineCapable: false,
   },
 };
@@ -59,10 +50,10 @@ export const MODEL_TIERS = {
  */
 export async function detectBrowserHardware() {
   const cores = navigator.hardwareConcurrency || 4;
-  const memory = navigator.deviceMemory || 8; // in GB
+  const memory = navigator.deviceMemory || 8;
 
   let hasWebGPU = false;
-  let gpuRenderer = 'Standard Host Graphics';
+  let gpuRenderer = 'Standard display adapter';
 
   try {
     if (navigator.gpu) {
@@ -86,7 +77,6 @@ export async function detectBrowserHardware() {
     }
   } catch (e) {}
 
-  // Storage estimation
   let storage = { usageMB: 0, quotaMB: 0, percentUsed: 0, isPersisted: false };
   try {
     if (navigator.storage && navigator.storage.estimate) {
@@ -105,7 +95,6 @@ export async function detectBrowserHardware() {
     }
   } catch (e) {}
 
-  // Determine auto-recommended tier
   let recommended = 'MID_RANGE';
   const gpuLower = gpuRenderer.toLowerCase();
   const hasDiscreteGPU =
@@ -154,8 +143,7 @@ export async function fetchBackendHardware() {
  */
 export async function requestPersistentStorage() {
   if (navigator.storage && navigator.storage.persist) {
-    const isPersisted = await navigator.storage.persist();
-    return isPersisted;
+    return await navigator.storage.persist();
   }
   return false;
 }
@@ -165,20 +153,19 @@ export async function requestPersistentStorage() {
  */
 export async function downloadModelToCache(tier, onProgress) {
   if (!('caches' in window)) {
-    throw new Error('CacheStorage not supported in this browser.');
+    throw new Error('Storage cache not available in this browser.');
   }
 
   const cache = await caches.open('vecna-pulse-model-cache');
   const totalSteps = 10;
 
   for (let i = 1; i <= totalSteps; i++) {
-    await new Promise((r) => setTimeout(r, 80));
+    await new Promise((r) => setTimeout(r, 70));
     if (onProgress) {
       onProgress(Math.round((i / totalSteps) * 100));
     }
   }
 
-  // Store metadata token in cache
   const metadata = {
     tier,
     cachedAt: new Date().toISOString(),
