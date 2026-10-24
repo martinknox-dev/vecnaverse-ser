@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Cpu, HardDrive, Download, Trash2, CheckCircle2, ShieldCheck, Box } from 'lucide-react';
+import { X, Cpu, HardDrive, Download, Trash2, CheckCircle2, ShieldCheck, Box, Sparkles } from 'lucide-react';
 import { MODEL_TIERS, requestPersistentStorage } from '../services/hardwareEngine';
 import {
-  LOCAL_MODELS,
+  getModelCatalogForTier,
   downloadAllLocalModels,
   clearAllLocalModels,
   areModelsInstalledLocally
@@ -25,20 +25,23 @@ export default function HardwareWizardModal({
   const [modelsInstalled, setModelsInstalled] = useState(false);
   const [isPersisted, setIsPersisted] = useState(storageInfo?.isPersisted || false);
 
-  useEffect(() => {
-    checkInstalledState();
-  }, [isOpen]);
+  const activeCatalog = getModelCatalogForTier(selectedTier);
 
-  const checkInstalledState = async () => {
-    const installed = await areModelsInstalledLocally();
+  useEffect(() => {
+    checkInstalledState(selectedTier);
+  }, [selectedTier, isOpen]);
+
+  const checkInstalledState = async (tier) => {
+    const installed = await areModelsInstalledLocally(tier);
     setModelsInstalled(installed);
   };
 
   const handleDownloadAllModels = async () => {
     try {
       setDownloadProgress(5);
-      setDownloadStatusText('Initializing persistent browser storage...');
+      setDownloadStatusText(`Initializing persistent storage for ${activeCatalog.profileName}...`);
       await downloadAllLocalModels(
+        selectedTier,
         (pct) => setDownloadProgress(pct),
         (status) => setDownloadStatusText(status)
       );
@@ -56,8 +59,8 @@ export default function HardwareWizardModal({
   };
 
   const handleClearCache = async () => {
-    if (confirm('Clear local on-device models and cache?')) {
-      await clearAllLocalModels();
+    if (confirm(`Clear local on-device models for ${activeCatalog.profileName}?`)) {
+      await clearAllLocalModels(selectedTier);
       setModelsInstalled(false);
       if (onRefreshStorage) onRefreshStorage();
     }
@@ -86,7 +89,7 @@ export default function HardwareWizardModal({
           <div className="flex items-center gap-2">
             <Cpu className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
             <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-              System Profile & Local Models
+              System Profile & Adaptive Models
             </h2>
           </div>
           <button
@@ -99,7 +102,7 @@ export default function HardwareWizardModal({
 
         {/* Content */}
         <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1">
-          {/* Detected specs */}
+          {/* Detected Host Specs */}
           <div className="bg-slate-50 dark:bg-[#131b26] border border-slate-200 dark:border-[#222f44] p-3 rounded-xl grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
             <div>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block font-medium">CPU cores</span>
@@ -121,39 +124,99 @@ export default function HardwareWizardModal({
             </div>
           </div>
 
-          {/* On-Device Local Models Card */}
+          {/* Profile / Tier Options */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-800 dark:text-slate-300">
+                Execution Profile (Adapts Model Sizes)
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                Auto-detected: <strong>{recommendedId}</strong>
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {Object.values(MODEL_TIERS).map((tier) => {
+                const isSelected = selectedTier === tier.id;
+                const isRec = recommendedId === tier.id;
+                const catalog = getModelCatalogForTier(tier.id);
+
+                return (
+                  <div
+                    key={tier.id}
+                    onClick={() => setSelectedTier(tier.id)}
+                    className={`p-3 rounded-xl border cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-cyan-50/80 dark:bg-[#182333] border-cyan-500 text-slate-900 dark:text-white shadow-sm'
+                        : 'bg-white dark:bg-[#131b26] border-slate-200 dark:border-[#222f44] text-slate-700 dark:text-slate-300 hover:border-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold flex items-center gap-1.5">
+                        {tier.name}
+                      </span>
+                      {isRec && (
+                        <span className="text-[9px] font-medium bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-1.5 py-0.2 rounded">
+                          Recommended
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
+                      {tier.description}
+                    </p>
+                    <div className="mt-1.5 flex justify-between text-[10px] font-mono text-cyan-600 dark:text-cyan-400">
+                      <span>{catalog.totalDownloadMB > 0 ? `${catalog.totalDownloadMB} MB total` : '0 MB download'}</span>
+                      <span>{catalog.models[0].modelSize}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Dynamic Model Bundle for Selected Profile */}
           <div className="bg-slate-50 dark:bg-[#131b26] border border-slate-200 dark:border-[#222f44] rounded-xl p-3.5 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200">
-                <Box className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                <span>On-Device Neural & Triage Models</span>
+              <div>
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  <Box className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+                  <span>{activeCatalog.profileName} Model Bundle</span>
+                </div>
+                <p className="text-[10px] text-cyan-700 dark:text-cyan-400 mt-0.5">
+                  Rating: <strong>{activeCatalog.accuracyRating}</strong> • {activeCatalog.recommendedFor}
+                </p>
               </div>
 
               {modelsInstalled ? (
                 <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded-full">
                   <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                  <span>Ready on device</span>
+                  <span>Ready</span>
                 </span>
               ) : (
                 <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
-                  Not installed yet
+                  {activeCatalog.totalDownloadMB === 0 ? 'Cloud API' : 'Not cached'}
                 </span>
               )}
             </div>
 
-            {/* List of 3 models */}
+            {/* List of 3 models for this profile */}
             <div className="space-y-1.5">
-              {LOCAL_MODELS.map((m) => (
+              {activeCatalog.models.map((m) => (
                 <div
                   key={m.id}
-                  className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-[#0f141e] border border-slate-200 dark:border-[#1e293b] text-xs"
+                  className="flex items-center justify-between p-2 rounded-lg bg-white dark:bg-[#0f141e] border border-slate-200 dark:border-[#1e293b] text-xs shadow-sm"
                 >
-                  <div>
-                    <strong className="text-slate-800 dark:text-slate-200 block text-xs">{m.name}</strong>
-                    <span className="text-[10px] text-slate-500 dark:text-slate-400">{m.description}</span>
+                  <div className="flex-1 pr-2">
+                    <div className="flex items-center gap-1.5">
+                      <strong className="text-slate-800 dark:text-slate-200 text-xs">{m.name}</strong>
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        {m.modelSize}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block mt-0.5">{m.description}</span>
                   </div>
-                  <span className="font-mono text-[10px] text-slate-400 shrink-0 ml-2">
-                    {m.sizeMB} MB
+                  <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 shrink-0">
+                    {m.sizeMB > 0 ? `${m.sizeMB} MB` : '0 MB'}
                   </span>
                 </div>
               ))}
@@ -183,10 +246,16 @@ export default function HardwareWizardModal({
                 className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white shadow-sm transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
-                <span>{modelsInstalled ? 'Re-verify & Cache Models' : 'Install Models to Device'}</span>
+                <span>
+                  {activeCatalog.totalDownloadMB === 0
+                    ? 'Verify Cloud API'
+                    : modelsInstalled
+                    ? `Re-cache Models (${activeCatalog.totalDownloadMB} MB)`
+                    : `Download & Cache Models (${activeCatalog.totalDownloadMB} MB)`}
+                </span>
               </button>
 
-              {modelsInstalled && (
+              {modelsInstalled && activeCatalog.totalDownloadMB > 0 && (
                 <button
                   onClick={handleClearCache}
                   className="flex items-center gap-1 text-xs text-slate-500 hover:text-rose-500 transition-colors"
@@ -195,46 +264,6 @@ export default function HardwareWizardModal({
                   <span>Clear models</span>
                 </button>
               )}
-            </div>
-          </div>
-
-          {/* Tier options */}
-          <div className="space-y-2">
-            <span className="text-xs font-semibold text-slate-800 dark:text-slate-300 block">
-              Execution profile
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {Object.values(MODEL_TIERS).map((tier) => {
-                const isSelected = selectedTier === tier.id;
-                const isRec = recommendedId === tier.id;
-
-                return (
-                  <div
-                    key={tier.id}
-                    onClick={() => setSelectedTier(tier.id)}
-                    className={`p-3 rounded-xl border cursor-pointer transition-colors ${
-                      isSelected
-                        ? 'bg-cyan-50/80 dark:bg-[#182333] border-cyan-500 text-slate-900 dark:text-white shadow-sm'
-                        : 'bg-white dark:bg-[#131b26] border-slate-200 dark:border-[#222f44] text-slate-700 dark:text-slate-300 hover:border-slate-400'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold flex items-center gap-1.5">
-                        {tier.name}
-                      </span>
-                      {isRec && (
-                        <span className="text-[9px] font-medium bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 px-1.5 py-0.2 rounded">
-                          Recommended
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-normal">
-                      {tier.description}
-                    </p>
-                  </div>
-                );
-              })}
             </div>
           </div>
 
@@ -264,7 +293,7 @@ export default function HardwareWizardModal({
             onClick={handleSaveAndApply}
             className="px-4 py-1.5 text-xs font-semibold bg-slate-900 dark:bg-slate-200 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-950 rounded-lg transition-colors shadow-sm"
           >
-            Save profile
+            Apply {activeCatalog.profileName.split(' ')[0]}
           </button>
         </div>
       </div>
