@@ -250,7 +250,7 @@ export default function HardwareWizardModal({
                   {activeCatalog.totalDownloadMB === 0
                     ? 'Verify Cloud API'
                     : modelsInstalled
-                    ? `Re-cache Models (${activeCatalog.totalDownloadMB} MB)`
+                    ? `Verify Installed Models (${activeCatalog.totalDownloadMB} MB)`
                     : `Download & Cache Models (${activeCatalog.totalDownloadMB} MB)`}
                 </span>
               </button>

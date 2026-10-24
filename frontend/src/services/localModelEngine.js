@@ -201,17 +201,33 @@ export async function areModelsInstalledLocally(tier = 'MID_RANGE') {
 }
 
 /**
- * Download and cache the specific model sizes for the selected tier
+ * Download and cache the specific model sizes for the selected tier.
+ * If already downloaded previously, retrieves from local CacheStorage/IndexedDB
+ * instantly rather than re-downloading each time.
  */
 export async function downloadAllLocalModels(tier = 'MID_RANGE', onProgress, onStatus) {
   if (tier === 'CLOUD_BYOK') {
     if (onProgress) onProgress(100);
     if (onStatus) onStatus('Cloud BYOK configured. Zero local download required.');
-    return true;
+    return { retrievedFromCache: true };
   }
 
   const catalog = getModelCatalogForTier(tier);
   const models = catalog.models;
+
+  // Check if previously downloaded models exist in cache
+  const alreadyInstalled = await areModelsInstalledLocally(tier);
+  if (alreadyInstalled) {
+    if (onStatus) onStatus(`Retrieved ${catalog.profileName} from on-device cache (0 MB re-downloaded).`);
+    if (onProgress) {
+      onProgress(30);
+      await new Promise((r) => setTimeout(r, 60));
+      onProgress(75);
+      await new Promise((r) => setTimeout(r, 60));
+      onProgress(100);
+    }
+    return { retrievedFromCache: true, models };
+  }
 
   // Request persistent storage from browser
   if (navigator.storage && navigator.storage.persist) {
@@ -291,8 +307,24 @@ export async function downloadAllLocalModels(tier = 'MID_RANGE', onProgress, onS
   } catch (e) {}
 
   if (onProgress) onProgress(100);
-  if (onStatus) onStatus(`All ${catalog.profileName} models installed locally (${catalog.totalDownloadMB} MB).`);
-  return true;
+  if (onStatus) onStatus(`All ${catalog.profileName} models cached locally (${catalog.totalDownloadMB} MB).`);
+  return { retrievedFromCache: false, models };
+}
+
+/**
+ * Retrieve a previously downloaded model from local CacheStorage
+ */
+export async function loadCachedModel(tier, modelId) {
+  if ('caches' in window) {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      const res = await cache.match(`/models/${tier.toLowerCase()}-${modelId}.bin`);
+      if (res) {
+        return await res.json();
+      }
+    } catch (e) {}
+  }
+  return null;
 }
 
 /**
