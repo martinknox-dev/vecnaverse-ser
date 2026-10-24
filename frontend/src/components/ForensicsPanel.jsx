@@ -69,6 +69,39 @@ export default function ForensicsPanel({
     };
   }, []);
 
+  // Stop audio playback immediately when switching calls
+  useEffect(() => {
+    cyberAudioPlayer.stop();
+    setIsPlayingAudio(false);
+    setAudioPlaybackSec(0);
+  }, [activeCall?.call_id]);
+
+  // Stop audio and recording if active tab changes
+  useEffect(() => {
+    cyberAudioPlayer.stop();
+    setIsPlayingAudio(false);
+    setAudioPlaybackSec(0);
+    if (isRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (speechRecognitionRef.current) {
+        try {
+          speechRecognitionRef.current.stop();
+        } catch (e) {}
+      }
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close().catch(() => {});
+      }
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      setIsRecording(false);
+      setFreqBands(new Array(24).fill(0));
+    }
+  }, [activeTab]);
+
   const toggleRecording = async () => {
     if (isRecording) {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {

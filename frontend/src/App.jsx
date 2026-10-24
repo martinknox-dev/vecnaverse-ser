@@ -9,6 +9,8 @@ import { FALLBACK_SCENARIOS, INDICATIVE_DISCLAIMER } from './mockData';
 import { detectBrowserHardware, fetchBackendHardware } from './services/hardwareEngine';
 import { analyzeAudioClientSide } from './services/clientSerEngine';
 import { saveCaseToDevice, getAllSavedCases, deleteSavedCase } from './services/caseDb';
+import { cyberAudioPlayer } from './services/audioSynthesizer';
+import AnalyzingOverlay from './components/AnalyzingOverlay';
 
 export default function App() {
   // Theme state: dark / light
@@ -75,6 +77,7 @@ export default function App() {
 
   // When demo mode toggles, update active call appropriately
   const handleToggleMockMode = (newVal) => {
+    cyberAudioPlayer.stop();
     setIsMockMode(newVal);
     if (newVal) {
       setActiveCall(FALLBACK_SCENARIOS[0]);
@@ -192,6 +195,7 @@ export default function App() {
   }, [isMockMode]);
 
   const handleSelectCall = (call) => {
+    cyberAudioPlayer.stop();
     setActiveCall(call);
     setCopilotData(null);
     const isSaved = savedCases.some((c) => c.call_id === call.call_id);
@@ -207,6 +211,7 @@ export default function App() {
 
   // Audio Analysis: Supports Hybrid Backend or Client-Side Pure Web Audio DSP
   const handleAnalyzeAudioFile = async (file, transcriptHint) => {
+    cyberAudioPlayer.stop();
     setIsAnalyzing(true);
 
     if (currentTier === 'LOW_END' || (!backendConnected && !isMockMode)) {
@@ -264,6 +269,7 @@ export default function App() {
   };
 
   const handleSimulateScenario = (scenarioKey) => {
+    cyberAudioPlayer.stop();
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'simulate_call', scenario: scenarioKey }));
       return;
@@ -555,6 +561,12 @@ export default function App() {
           const hw = await detectBrowserHardware();
           setStorageInfo(hw.storage);
         }}
+      />
+
+      {/* Full-Screen Analyzing Progress Overlay */}
+      <AnalyzingOverlay
+        isOpen={isAnalyzing}
+        onClose={() => setIsAnalyzing(false)}
       />
     </div>
   );
