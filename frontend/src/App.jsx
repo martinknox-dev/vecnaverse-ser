@@ -39,9 +39,11 @@ export default function App() {
     return isMockMode ? FALLBACK_SCENARIOS[0] : null;
   });
 
-  // Modal states
+  // Modal states: Setup Wizard automatically opens on first visit
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isHardwareWizardOpen, setIsHardwareWizardOpen] = useState(false);
+  const [isHardwareWizardOpen, setIsHardwareWizardOpen] = useState(() => {
+    return !localStorage.getItem('vecna_hardware_setup_done');
+  });
 
   // Settings & Tier (supports localStorage and optional Vercel env variables)
   const [provider, setProvider] = useState(() => {
@@ -124,6 +126,12 @@ export default function App() {
       if (!savedTier) {
         setCurrentTier(merged.recommendedTier);
         localStorage.setItem('vecna_model_tier', merged.recommendedTier);
+      }
+
+      // Ensure wizard opens on first visit
+      const wizardDone = localStorage.getItem('vecna_hardware_setup_done');
+      if (!wizardDone) {
+        setIsHardwareWizardOpen(true);
       }
     };
 
